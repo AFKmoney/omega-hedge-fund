@@ -1,0 +1,29 @@
+# OMEGA — Autonomous Multi-Modal AI Hedge Fund Entity
+# Production dependencies (Python 3.12+)
+
+# Core
+numpy>=1.26,<3.0
+pandas>=2.2,<3.0
+scipy>=1.11,<2.0
+
+# Async / networking
+aiohttp>=3.9,<4.0
+websockets>=12.0,<17.0
+
+# PyTorch (CPU build; install GPU build separately if needed)
+torch>=2.2,<3.0
+
+# Stats / ML
+scikit-learn>=1.4,<2.0
+statsmodels>=0.14,<1.0
+hmmlearn>=0.3,<1.0
+
+# Infrastructure (optional — fallbacks built-in)
+# Uncomment when running production:
+# confluent-kafka>=2.3,<3.0
+# pymilvus>=2.4,<3.0
+
+# CLI tooling (LLM agent calls)
+# z-ai CLI must be installed separately at /usr/local/bin/z-ai
+
+# Logging / utilities (stdlib-only — no extra deps)

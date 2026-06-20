@@ -1,0 +1,41 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Checkpoints and model artifacts
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+
+# Data and logs
+data/
+*.log
+*.parquet
+*.csv
+!tests/*.csv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Environment
+.env
+.env.local
+*.env
+
+# Generated reports
+results.json
+autopsy_*.json
