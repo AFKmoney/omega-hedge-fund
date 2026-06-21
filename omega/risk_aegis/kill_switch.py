@@ -53,19 +53,37 @@ class KillSwitch:
         self._api_errors = 0
 
     def record_price(self, price: float) -> None:
-        """Track prices for flash-crash detection."""
+        """Track prices for flash-crash detection.
+
+        BUGFIX: the previous check only required >=10 samples in the 60s window.
+        At startup, 10 ticks arrive within a few hundred milliseconds, so the
+        "oldest" sample was nearly as fresh as the current one — any normal
+        tick-to-tick price wobble (e.g. a trade at a different price than the
+        prior depth snapshot) was misread as a >5% drop "in 60s", instantly
+        latching the kill switch and freezing all trading before the agent had
+        even warmed up. We now additionally require the oldest retained sample
+        to be at least `flash_crash_min_window_sec` (default 30s) old, so the
+        comparison reflects a genuine multi-tens-of-seconds move rather than a
+        sub-second startup artifact.
+        """
         now = time.time()
         self._recent_prices.append((now, price))
         # Drop entries older than 60s
         cutoff = now - 60.0
         while self._recent_prices and self._recent_prices[0][0] < cutoff:
             self._recent_prices.popleft()
-        # Check for flash crash
-        if len(self._recent_prices) >= 10:
-            oldest_price = self._recent_prices[0][1]
-            if oldest_price > 0:
+        # Check for flash crash — but only once we have at least 10 samples AND
+        # the oldest retained sample is at least min-window seconds old (so a
+        # startup burst measured over milliseconds can't masquerade as a crash).
+        min_window = getattr(
+            self.settings, "kill_switch_flash_crash_min_window_sec", 30.0
+        )
+        if len(self._recent_prices) >= 10 and not self._triggered:
+            oldest_ts, oldest_price = self._recent_prices[0]
+            age = now - oldest_ts
+            if age >= min_window and oldest_price > 0:
                 drop_pct = (oldest_price - price) / oldest_price * 100.0
-                if drop_pct >= self.settings.kill_switch_flash_crash_pct and not self._triggered:
+                if drop_pct >= self.settings.kill_switch_flash_crash_pct:
                     self.trigger(f"flash_crash_{drop_pct:.1f}pct")
 
     def record_equity(self, equity: float) -> None:

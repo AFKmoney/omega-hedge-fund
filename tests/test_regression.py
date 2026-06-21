@@ -299,6 +299,55 @@ def test_binance_trade_carries_cached_book() -> None:
 
 
 # ---------------------------------------------------------------------------
+# RT1 — kill switch must NOT latch on startup (found via live dry-run test)
+# ---------------------------------------------------------------------------
+
+def test_kill_switch_no_false_flash_crash_on_startup() -> None:
+    """At startup, many ticks arrive within milliseconds. The kill switch
+    must not interpret a normal tick-to-tick price wobble as a '5% drop in
+    60s' and latch — that froze all trading before the agent warmed up.
+    Reproduced live: a real dry-run triggered flash_crash_97.3pct at t=2s."""
+    print("Testing RT1: no false flash-crash on startup...", end=" ")
+    import time as _time
+    from omega.risk_aegis import KillSwitch
+
+    ks = KillSwitch()
+    # Simulate startup: 50 ticks over ~0.1s (realistic WebSocket burst), with
+    # the kind of price jitter you get when trade/depth/ticker frames have
+    # slightly different last_price values. A naive detector would compare the
+    # 1st and 50th tick (both <0.1s old) and call the spread a flash crash.
+    base = 50000.0
+    for i in range(50):
+        jitter = base * 0.02 * ((-1) ** i)  # +/-2% jitter, never a real crash
+        ks.record_price(base + jitter)
+        _time.sleep(0.002)
+    assert not ks.is_triggered, (
+        f"kill switch latched on startup jitter: {ks.trigger_reason}"
+    )
+
+    # Now inject a GENUINE flash crash spread over >60s and confirm it DOES fire.
+    # We simulate a real 60s window: the oldest retained price is exactly 60s
+    # old and 10% above the current price.
+    # Now inject a GENUINE flash crash and confirm it DOES fire. After the fix,
+    # the detector requires the oldest retained sample to be at least 30s old
+    # (so a real multi-tens-of-seconds crash triggers, but a startup burst
+    # measured over milliseconds does not). Seed oldest at 40s ago — well inside
+    # the 60s retention window AND past the 30s minimum-age guard.
+    ks2 = KillSwitch()
+    oldest_ts = _time.time() - 40.0
+    for i in range(12):
+        ks2._recent_prices.append((oldest_ts + i * 0.0001, 100.0))
+    ks2.record_price(90.0)  # 10% drop over a genuine 40s window → trigger
+    assert ks2.is_triggered, (
+        f"kill switch failed to fire on a real 10% / 40s crash "
+        f"(window size={len(ks2._recent_prices)}, "
+        f"oldest_age={_time.time() - ks2._recent_prices[0][0]:.2f}s if any)"
+    )
+    assert ks2.trigger_reason and ks2.trigger_reason.startswith("flash_crash")
+    print("✓")
+
+
+# ---------------------------------------------------------------------------
 
 def main() -> None:
     print("=" * 50)
@@ -315,6 +364,7 @@ def main() -> None:
         test_news_scoring_is_async,
         test_kelly_attributes_to_contributing_agent,
         test_binance_trade_carries_cached_book,
+        test_kill_switch_no_false_flash_crash_on_startup,
     ]
     failed = 0
     for test in tests:

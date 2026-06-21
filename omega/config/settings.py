@@ -32,7 +32,7 @@ from typing import Dict, List
 
 
 def _default_data_dir() -> Path:
-    """
+    r"""
     Portable default data directory.
     Honors OMEGA_DATA_DIR; otherwise uses ~/.omega/data on every platform.
     BUGFIX: previously hard-coded the Linux path /home/z/my-project/data, which
