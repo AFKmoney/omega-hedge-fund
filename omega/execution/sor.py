@@ -41,13 +41,22 @@ class SmartOrderRouter:
             raise KeyError(f"Venue '{name}' not registered. Available: {list(self.executors)}")
         return self.executors[name]
 
-    def select_algorithm(self, order: OrderEvent, order_book_imbalance: float = 0.0):
+    def select_algorithm(
+        self, order: OrderEvent, reference_price: Optional[float] = None
+    ):
         """
-        Pick the execution algorithm based on order size and book conditions.
+        Pick the execution algorithm based on order notional and book conditions.
         Returns one of: None (single market order), TWAP, VWAP, Iceberg.
+
+        `reference_price` is the current mid/last price for the symbol; it is
+        used to estimate notional for MARKET orders (which have no limit_price).
+        BUGFIX: previously this used order.limit_price, which is None for MARKET
+        orders, so notional was always 0 and TWAP was chosen for every order
+        regardless of size.
         """
-        notional = order.qty * (order.limit_price or 0.0)
-        # If we don't know notional (market order with no price), assume medium
+        price = order.limit_price if order.limit_price else reference_price
+        notional = order.qty * (price or 0.0)
+        # If we don't know notional, assume medium
         if notional == 0:
             notional = 10_000.0
         if notional < 1_000:
@@ -59,10 +68,13 @@ class SmartOrderRouter:
         else:
             return Iceberg(display_qty_pct=0.05, refresh_sec=2)
 
-    async def route(self, order: OrderEvent, venue: str = "binance") -> str:
+    async def route(
+        self, order: OrderEvent, venue: str = "binance",
+        reference_price: Optional[float] = None,
+    ) -> str:
         """Route an order to the chosen venue. Returns exchange order ID."""
         executor = self.get_venue(venue)
-        algo = self.select_algorithm(order)
+        algo = self.select_algorithm(order, reference_price=reference_price)
         if algo is None:
             return await executor.submit(order)
         # Use the algorithm to slice the parent order

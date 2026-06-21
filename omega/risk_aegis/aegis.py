@@ -120,7 +120,15 @@ class RiskAegis:
             )
             return None
         # 5. Portfolio heat check
-        side_str = "long" if signal.side == Side.BUY else "short"
+        # BUGFIX (minor): a FLAT signal would have been labeled "short" by the
+        # old ternary; map it explicitly. (FLAT signals normally do not reach
+        # here because of the confidence floor, but be correct regardless.)
+        if signal.side == Side.BUY:
+            side_str = "long"
+        elif signal.side == Side.SELL:
+            side_str = "short"
+        else:
+            side_str = "flat"
         position = Position(
             symbol=signal.symbol,
             side=side_str,

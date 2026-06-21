@@ -47,12 +47,18 @@ class MonteCarloEngine:
         Run Monte Carlo. Returns a position-size multiplier in [0.0, 1.0].
         1.0 = no de-risking. 0.0 = full liquidation recommended.
         """
+        # BUGFIX: the early returns below previously did not update
+        # _last_multiplier, so aegis.on_signal (which reads _last_multiplier
+        # rather than this return value) kept using a stale, possibly low
+        # multiplier. Now every path updates _last_multiplier.
         if len(self._returns) < 50:
+            self._last_multiplier = 1.0
             return 1.0
         returns = np.array(self._returns, dtype=np.float64)
         # Filter extreme outliers for bootstrap stability
         returns = returns[np.abs(returns) < np.std(returns) * 5 + 1e-9]
         if len(returns) < 30:
+            self._last_multiplier = 1.0
             return 1.0
         n_paths = self.settings.monte_carlo_paths
         horizon = self.settings.monte_carlo_horizon_bars

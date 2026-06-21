@@ -83,9 +83,20 @@ class KellyPositionSizer:
         Compute position size for a signal.
         Returns KellyResult with rejection reason if size is zero.
         """
-        # 1. Win probability: use agent confidence as prior, blend with historical win rate
-        agent = signal.metadata.get("contributing_agents", [signal.agent])[0] if signal.metadata else signal.agent
-        agent = signal.agent if signal.agent == "debate_chamber" else signal.agent
+        # 1. Win probability: use agent confidence as prior, blend with historical win rate.
+        # BUGFIX: the previous two lines were:
+        #     agent = signal.metadata.get("contributing_agents", [signal.agent])[0] if signal.metadata else signal.agent
+        #     agent = signal.agent if signal.agent == "debate_chamber" else signal.agent
+        # The second line unconditionally overwrote the first (both branches
+        # returned signal.agent), so per-agent Kelly stats were always recorded
+        # under "debate_chamber" instead of the originating alpha agent.
+        # Now: attribute to the contributing agent when the Debate Chamber
+        # consolidated the signal, else to the signal's own agent.
+        if signal.agent == "debate_chamber" and signal.metadata.get("contributing_agents"):
+            agents_list = signal.metadata["contributing_agents"]
+            agent = agents_list[0] if isinstance(agents_list, list) and agents_list else signal.agent
+        else:
+            agent = signal.agent
         hist_wins = self._agent_wins.get(agent, 0)
         hist_losses = self._agent_losses.get(agent, 0)
         total = hist_wins + hist_losses

@@ -31,7 +31,7 @@ from __future__ import annotations
 import os
 from collections import deque
 from dataclasses import dataclass
-from typing import Deque, List, Optional, Tuple
+from typing import Deque, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -291,10 +291,16 @@ class PPOAgent(AlphaAgent):
         )
 
         self.buffer = RolloutBuffer(self.settings.ppo_rollout_len, obs_dim)
-        self._history: Deque[np.ndarray] = deque(maxlen=self.settings.observation_window)
-        self._last_action: int = 1  # FLAT
-        self._last_price: dict = {}
-        self._entry_price: dict = {}
+        # BUGFIX: per-symbol state. Previously a single agent shared one history
+        # buffer / one action across all symbols, mashing BTC/ETH/SOL bars
+        # together and producing incoherent features. Now each symbol keeps its
+        # own rolling history, last action, entry price, and last price.
+        self._history: Dict[str, Deque[np.ndarray]] = {
+            s: deque(maxlen=self.settings.observation_window) for s in symbols
+        }
+        self._last_action: Dict[str, int] = {s: 1 for s in symbols}  # FLAT
+        self._last_price: Dict[str, float] = {}
+        self._entry_price: Dict[str, float] = {}
         self._step_count = 0
         self.is_ready = True
 
@@ -303,19 +309,23 @@ class PPOAgent(AlphaAgent):
     # ------------------------------------------------------------------
 
     def on_market(self, event: MarketEvent) -> List[SignalEvent]:
-        # Append to rolling history
+        sym = event.symbol
+        if sym not in self._history:
+            # Unknown symbol — ignore (keeps agent scoped to configured symbols)
+            return []
+        # Append to this symbol's rolling history
         row = np.array([
             event.last_price, event.last_price, event.last_price,
             event.last_price, event.volume_24h, event.bid, event.ask,
             event.bid_qty, event.ask_qty,
         ], dtype=np.float32)
-        self._history.append(row)
+        self._history[sym].append(row)
 
-        if len(self._history) < 20:
+        if len(self._history[sym]) < 20:
             return []
 
         # Build observation
-        hist = np.array(self._history, dtype=np.float32)
+        hist = np.array(self._history[sym], dtype=np.float32)
         obs = _features_from_history(hist, self.mode)
         obs_t = torch.from_numpy(obs).unsqueeze(0).to(self.device)
 
@@ -327,7 +337,7 @@ class PPOAgent(AlphaAgent):
             action = dist.sample().item()
             log_prob = dist.log_prob(torch.tensor(action, device=self.device)).item()
 
-        # Compute reward from previous step (PnL-based)
+        # Compute reward from previous step (PnL-based) for this symbol
         reward = self._compute_reward(event)
         done = False
         self.buffer.add(Transition(obs, action, log_prob, reward, value, done))
@@ -342,14 +352,15 @@ class PPOAgent(AlphaAgent):
             self.buffer.idx = 0
 
         # Emit signal if action changed
+        last_action = self._last_action[sym]
         side = ACTION_TO_SIDE[action]
-        if action != self._last_action and side != Side.FLAT:
-            self._entry_price[event.symbol] = event.last_price
-            self._last_action = action
+        if action != last_action and side != Side.FLAT:
+            self._entry_price[sym] = event.last_price
+            self._last_action[sym] = action
             confidence = self._confidence(logits)
             return [SignalEvent(
                 agent=self.name,
-                symbol=event.symbol,
+                symbol=sym,
                 timestamp=event.timestamp,
                 side=side,
                 confidence=confidence,
@@ -359,38 +370,54 @@ class PPOAgent(AlphaAgent):
                 rationale=f"PPO {self.mode}: action={ACTION_NAMES[action]}",
                 metadata={"logits": logits.squeeze().tolist(), "value": value},
             )]
-        elif action == 1 and self._last_action != 1:
+        elif action == 1 and last_action != 1:
             # Just went flat — close any position
-            self._last_action = action
-            self._entry_price.pop(event.symbol, None)
+            self._last_action[sym] = action
+            self._entry_price.pop(sym, None)
             return [SignalEvent(
                 agent=self.name,
-                symbol=event.symbol,
+                symbol=sym,
                 timestamp=event.timestamp,
                 side=Side.FLAT,
                 confidence=0.5,
                 rationale=f"PPO {self.mode}: flatten",
             )]
-        self._last_action = action
-        self._last_price[event.symbol] = event.last_price
+        self._last_action[sym] = action
+        self._last_price[sym] = event.last_price
         return []
 
     def _compute_reward(self, event: MarketEvent) -> float:
-        """PnL-shaped reward for the previous action."""
-        prev_price = self._last_price.get(event.symbol)
+        """
+        PnL-shaped reward for the previous action on this symbol.
+
+        trend   : reward = direction * bar_return
+        meanrev : reward = -direction * (price - rolling_mean)/rolling_mean
+                  i.e. fade deviation from the rolling mean. BUGFIX: previously
+                  the meanrev branch reused `ret` as `momentum`, so the term
+                  collapsed to a trivial 0.7x scaling of the trend reward.
+        """
+        sym = event.symbol
+        prev_price = self._last_price.get(sym)
         if prev_price is None or prev_price == 0:
             return 0.0
         ret = (event.last_price - prev_price) / prev_price
-        # Direction of last action
-        direction = 1.0 if self._last_action == 2 else (-1.0 if self._last_action == 0 else 0.0)
-        pnl = direction * ret
-        if self.mode == "meanrev":
-            # Reward mean reversion: positive pnl when fading extremes
-            # Add penalty for being on the wrong side of momentum
-            momentum = (event.last_price - prev_price) / prev_price
-            pnl = pnl - 0.3 * direction * momentum
-        # Transaction cost penalty for switching actions
-        # (already encoded in the policy through entropy bonus)
+        direction = 1.0 if self._last_action.get(sym, 1) == 2 else (
+            -1.0 if self._last_action.get(sym, 1) == 0 else 0.0
+        )
+        if self.mode == "trend":
+            pnl = direction * ret
+        else:
+            # Mean-reversion: reward fading extremes. Build a short rolling
+            # mean from this symbol's recent closes; reward the agent when its
+            # position opposes the current deviation from that mean.
+            recent = list(self._history[sym])[-20:]
+            closes = np.array([r[3] for r in recent], dtype=np.float64)
+            if len(closes) >= 5:
+                mean = closes.mean()
+                deviation = (event.last_price - mean) / (mean + 1e-9)
+                pnl = -direction * deviation
+            else:
+                pnl = direction * ret
         return float(pnl * 1000.0)  # scale to bps-ish
 
     def _confidence(self, logits: torch.Tensor) -> float:

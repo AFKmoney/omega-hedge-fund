@@ -31,6 +31,19 @@ from pathlib import Path
 from typing import Dict, List
 
 
+def _default_data_dir() -> Path:
+    """
+    Portable default data directory.
+    Honors OMEGA_DATA_DIR; otherwise uses ~/.omega/data on every platform.
+    BUGFIX: previously hard-coded the Linux path /home/z/my-project/data, which
+    became an invalid relative path (\home\z\...) on Windows / macOS.
+    """
+    env = os.getenv("OMEGA_DATA_DIR")
+    if env:
+        return Path(env)
+    return Path.home() / ".omega" / "data"
+
+
 @dataclass(frozen=True)
 class DataNexusSettings:
     """Layer 1 — Data Nexus configuration."""
@@ -75,7 +88,7 @@ class AlphaSwarmSettings:
     critic_hidden: tuple = (256, 256)
     observation_window: int = 64  # bars of history fed to the policy
     # LLM macro agent
-    zai_cli_path: str = "/usr/local/bin/z-ai"
+    zai_cli_path: str = "z-ai"
     llm_macro_poll_interval_sec: int = 300
     # Stat-arb
     cointegration_lookback: int = 500
@@ -152,9 +165,10 @@ class Settings:
     """Top-level OMEGA configuration container."""
     env: str = "dev"
     log_level: str = "INFO"
-    data_dir: Path = Path("/home/z/my-project/data")
+    data_dir: Path = field(default_factory=_default_data_dir)
     binance_api_key: str = ""
     binance_api_secret: str = ""
+    binance_testnet: bool = False
     data_nexus: DataNexusSettings = field(default_factory=DataNexusSettings)
     alpha_swarm: AlphaSwarmSettings = field(default_factory=AlphaSwarmSettings)
     regime: RegimeSettings = field(default_factory=RegimeSettings)
@@ -171,9 +185,11 @@ def load_settings() -> Settings:
     """Load settings from environment variables with production defaults."""
     env = os.getenv("OMEGA_ENV", "dev")
     log_level = os.getenv("OMEGA_LOG_LEVEL", "INFO")
-    data_dir = Path(os.getenv("OMEGA_DATA_DIR", "/home/z/my-project/data"))
+    data_dir = _default_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
 
+    binance_api_key = os.getenv("BINANCE_API_KEY", "")
+    binance_api_secret = os.getenv("BINANCE_API_SECRET", "")
     binance_testnet = os.getenv("BINANCE_TESTNET", "false").lower() == "true"
     symbols_env = os.getenv("OMEGA_SYMBOLS", "BTCUSDT,ETHUSDT,SOLUSDT")
     symbols = tuple(s.strip().upper() for s in symbols_env.split(",") if s.strip())
@@ -193,7 +209,7 @@ def load_settings() -> Settings:
     )
 
     alpha_swarm = AlphaSwarmSettings(
-        zai_cli_path=os.getenv("ZAI_CLI_PATH", "/usr/local/bin/z-ai"),
+        zai_cli_path=os.getenv("ZAI_CLI_PATH", "z-ai"),
     )
 
     risk = RiskAegisSettings(
@@ -210,8 +226,9 @@ def load_settings() -> Settings:
         env=env,
         log_level=log_level,
         data_dir=data_dir,
-        binance_api_key=os.getenv("BINANCE_API_KEY", ""),
-        binance_api_secret=os.getenv("BINANCE_API_SECRET", ""),
+        binance_api_key=binance_api_key,
+        binance_api_secret=binance_api_secret,
+        binance_testnet=binance_testnet,
         data_nexus=data_nexus,
         alpha_swarm=alpha_swarm,
         risk=risk,

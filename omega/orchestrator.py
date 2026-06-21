@@ -53,7 +53,12 @@ class OmegaOrchestrator:
         # Layer 4
         self.risk_aegis = RiskAegis(self.settings.risk)
         # Layer 5
-        self.execution_blade = ExecutionBlade(self.settings.execution)
+        self.execution_blade = ExecutionBlade(
+            self.settings.execution,
+            binance_api_key=self.settings.binance_api_key,
+            binance_api_secret=self.settings.binance_api_secret,
+            binance_testnet=self.settings.binance_testnet,
+        )
         # Layer 6
         self.meta_cognition = MetaCognition(self.settings.meta_cognition)
         # State
@@ -100,6 +105,8 @@ class OmegaOrchestrator:
                 await self._loop_task
             except asyncio.CancelledError:
                 pass
+            except Exception as exc:
+                logger.warning(f"Loop task shutdown error: {exc}")
         await self.alpha_swarm.stop()
         await self.meta_cognition.stop_background()
         await self.data_nexus.stop()
@@ -137,16 +144,24 @@ class OmegaOrchestrator:
             raise
 
     async def _on_market(self, event: MarketEvent) -> None:
-        """Handle a MarketEvent: regime → alpha swarm → risk → execution."""
+        """Handle a MarketEvent: regime → risk tracking → alpha swarm → risk → execution."""
         # 1. Regime detection
         regime = self.regime_detector.on_market(event)
         if regime is not None and regime != self._last_regime:
             self._last_regime = regime
             weights = self.weight_router.weights_for(regime)
             self.alpha_swarm.set_regime_weights(weights)
-        # 2. Update meta-cognition with price (for MFE/MAE tracking)
+        # 2. Feed Risk Aegis with market data so it can:
+        #    - track last prices (used for position sizing in _process_signals)
+        #    - feed the Monte Carlo return pool
+        #    - feed the portfolio-heat correlation matrix
+        #    - feed the kill-switch flash-crash + drawdown detectors
+        # BUGFIX: previously this was never called, so _process_signals always
+        # skipped every signal because portfolio_heat._last_prices was empty.
+        self.risk_aegis.on_market(event)
+        # 3. Update meta-cognition with price (for MFE/MAE tracking)
         self.meta_cognition.update_price(event.symbol, event.last_price)
-        # 3. Alpha swarm produces signals
+        # 4. Alpha swarm produces signals
         signals = self.alpha_swarm.on_market(event)
         await self._process_signals(signals, event.timestamp)
 

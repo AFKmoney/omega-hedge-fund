@@ -300,13 +300,18 @@ class TradingEnvironment:
         self._position = action
         self.risk_aegis.on_market(event)
         self._equity_curve.append(self._equity)
+        # BUGFIX (minor): increment the bar counter so live episodes terminate
+        # at max_episode_bars and so stats() reports an accurate bar count.
+        self._t += 1
         info = {
             "equity": self._equity,
             "position": self._position,
+            "bar": self._t,
             "kill_switch": self.risk_aegis.kill_switch.is_triggered,
         }
         done = (
-            self.risk_aegis.kill_switch.is_triggered
+            self._t >= self.config.max_episode_bars
+            or self.risk_aegis.kill_switch.is_triggered
             or self._equity <= self.config.initial_equity * 0.5
         )
         return self._obs(), reward, done, info

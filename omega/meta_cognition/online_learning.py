@@ -14,7 +14,8 @@ OnlineLearner does the actual retraining.
 from __future__ import annotations
 
 import time
-from typing import Dict, List
+from pathlib import Path
+from typing import Dict, List, Optional
 
 from omega.config.settings import MetaCognitionSettings
 from omega.utils.logger import get_logger
@@ -28,10 +29,11 @@ class OnlineLearner:
     def __init__(
         self,
         settings: MetaCognitionSettings | None = None,
-        data_dir: str = "/home/z/my-project/data",
+        data_dir: Optional[str] = None,
     ) -> None:
+        from omega.config.settings import _default_data_dir
         self.settings = settings or MetaCognitionSettings()
-        self.data_dir = data_dir
+        self.data_dir = str(Path(data_dir) if data_dir else _default_data_dir())
         self._bars_since_retrain: int = 0
         self._retrain_count: int = 0
         self._retrain_log: List[dict] = []

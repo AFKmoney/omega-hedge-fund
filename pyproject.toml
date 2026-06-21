@@ -54,7 +54,7 @@ omega-live = "scripts.live_trade:run"
 omega-backtest = "scripts.backtest:main"
 
 [tool.setuptools.packages.find]
-include = ["omega*"]
+include = ["omega*", "scripts*"]
 
 [tool.ruff]
 line-length = 100
