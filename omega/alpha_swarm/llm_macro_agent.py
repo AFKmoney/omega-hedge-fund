@@ -23,6 +23,7 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import subprocess
 import time
 from collections import deque
@@ -98,6 +99,17 @@ class LLMMacroAgent(AlphaAgent):
         self._last_emit: Dict[str, float] = {}
         self._bg_task: Optional[asyncio.Task] = None
         self.is_ready = True
+        # Warn once if the configured LLM CLI is not on PATH so users get a
+        # clear signal rather than silent failures (subprocess returns nonzero
+        # and the agent just never emits views).
+        if not (os.path.isabs(self.zai_cli_path) and os.path.exists(self.zai_cli_path)) \
+                and shutil.which(self.zai_cli_path) is None:
+            logger.warning(
+                f"LLM CLI '{self.zai_cli_path}' not found on PATH. "
+                f"Macro views and news sentiment will be unavailable until it "
+                f"is installed (set ZAI_CLI_PATH to override).",
+                extra={"component": "alpha_swarm.llm_macro", "agent": self.name},
+            )
 
     # ------------------------------------------------------------------
     # Background LLM polling

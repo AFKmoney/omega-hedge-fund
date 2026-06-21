@@ -24,6 +24,7 @@ import re
 import subprocess
 import time
 from collections import deque
+from pathlib import Path
 from typing import Deque, Dict, List, Optional
 
 from omega.config.settings import MetaCognitionSettings
@@ -54,12 +55,13 @@ class TradeAutopsy:
     def __init__(
         self,
         settings: Optional[MetaCognitionSettings] = None,
-        zai_cli_path: str = "/usr/local/bin/z-ai",
-        data_dir: str = "/home/z/my-project/data",
+        zai_cli_path: str = "z-ai",
+        data_dir: Optional[str] = None,
     ) -> None:
+        from omega.config.settings import _default_data_dir
         self.settings = settings or MetaCognitionSettings()
         self.zai_cli_path = zai_cli_path
-        self.data_dir = data_dir
+        self.data_dir = str(Path(data_dir) if data_dir else _default_data_dir())
         os.makedirs(self.data_dir, exist_ok=True)
         self._recent_trades: Deque[TradeClosedEvent] = deque(
             maxlen=self.settings.autopsy_max_trades

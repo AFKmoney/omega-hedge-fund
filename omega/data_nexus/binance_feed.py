@@ -53,6 +53,11 @@ class BinanceWebSocketFeed(DataSource):
         self.max_reconnect_delay = max_reconnect_delay
         self._session: Optional[aiohttp.ClientSession] = None
         self._last_funding: dict = {}
+        # BUGFIX: cache the last known top-of-book per symbol so that pure
+        # trade events (which carry no bid/ask) attach the most recent book
+        # snapshot instead of zeros. Previously trade events had bid=ask=0,
+        # making order-book-imbalance features intermittently zero.
+        self._last_book: dict = {}  # symbol -> (bid, ask, bid_qty, ask_qty)
 
     def _build_stream_payload(self) -> List[str]:
         """Build the combined-stream subscription payload for Binance."""
@@ -135,13 +140,18 @@ class BinanceWebSocketFeed(DataSource):
 
     def _parse_trade(self, data: dict) -> MarketEvent:
         sym = data["s"]
+        # Attach the most recent known top-of-book for this symbol so that
+        # order-book-imbalance features are not zeroed out on trade events.
+        book = self._last_book.get(sym, (0.0, 0.0, 0.0, 0.0))
         return MarketEvent(
             symbol=sym,
             timestamp=self._ms_to_iso(data["T"]),
             last_price=float(data["p"]),
             volume_24h=0.0,  # filled in by ticker
-            bid=0.0,
-            ask=0.0,
+            bid=book[0],
+            ask=book[1],
+            bid_qty=book[2],
+            ask_qty=book[3],
             funding_rate=self._last_funding.get(sym),
             source="binance_trade",
         )
@@ -157,6 +167,8 @@ class BinanceWebSocketFeed(DataSource):
         bid_qty = bids[0][1] if bids else 0.0
         ask_qty = asks[0][1] if asks else 0.0
         last = (bid + ask) / 2.0 if bid and ask else 0.0
+        if sym and bid and ask:
+            self._last_book[sym] = (bid, ask, bid_qty, ask_qty)
         return MarketEvent(
             symbol=sym,
             timestamp=self._ms_to_iso(data.get("E", 0)),
@@ -174,15 +186,20 @@ class BinanceWebSocketFeed(DataSource):
 
     def _parse_ticker(self, data: dict) -> MarketEvent:
         sym = data["s"]
+        bid = float(data["b"])
+        ask = float(data["a"])
+        bid_qty = float(data["B"])
+        ask_qty = float(data["A"])
+        self._last_book[sym] = (bid, ask, bid_qty, ask_qty)
         return MarketEvent(
             symbol=sym,
             timestamp=self._ms_to_iso(data["E"]),
             last_price=float(data["c"]),
             volume_24h=float(data["v"]),
-            bid=float(data["b"]),
-            ask=float(data["a"]),
-            bid_qty=float(data["B"]),
-            ask_qty=float(data["A"]),
+            bid=bid,
+            ask=ask,
+            bid_qty=bid_qty,
+            ask_qty=ask_qty,
             funding_rate=self._last_funding.get(sym),
             source="binance_ticker",
         )

@@ -104,8 +104,10 @@ class DataNexus:
         for task in self._tasks:
             try:
                 await task
-            except (asyncio.CancelledError, Exception):
+            except asyncio.CancelledError:
                 pass
+            except Exception as exc:
+                logger.warning(f"Source shutdown error: {exc}")
         await self.binance.stop()
         await self.etherscan.stop()
         await self.news.stop()

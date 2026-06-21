@@ -27,7 +27,7 @@ Public API:
 """
 
 __version__ = "1.0.0"
-__author__ = "OMGA Quantitative Research"
+__author__ = "OMEGA Quantitative Research"
 
 from omega.config.settings import Settings, load_settings
 from omega.orchestrator import OmegaOrchestrator

@@ -65,14 +65,22 @@ class GeneticOptimizer:
         )
         self._fitness_history[name] = []
 
-    def update_fitness(self, name: str, daily_pnl_bps: float) -> None:
-        """Record one day of PnL for an agent."""
+    def update_fitness(self, name: str, pnl_bps: float) -> None:
+        """
+        Record one closed trade's PnL (in bps) for an agent.
+
+        NOTE: despite the older name `daily_pnl_bps`, OMEGA feeds per-trade PnL
+        here (one entry per closed trade, not per day). The fitness metric is a
+        per-trade Sharpe ratio used only for *relative* comparison between
+        agents over the trial window, so it is intentionally not annualized.
+        """
         if name not in self._fitness_history:
             self._fitness_history[name] = []
-        self._fitness_history[name].append(daily_pnl_bps)
-        # Keep only last 30 days
-        if len(self._fitness_history[name]) > 30:
-            self._fitness_history[name] = self._fitness_history[name][-30:]
+        self._fitness_history[name].append(pnl_bps)
+        # Keep only the most recent trial window
+        window = self.settings.genetic_underperformance_days
+        if len(self._fitness_history[name]) > window:
+            self._fitness_history[name] = self._fitness_history[name][-window:]
 
     def maybe_evolve(self) -> Dict[str, Dict]:
         """
@@ -115,13 +123,19 @@ class GeneticOptimizer:
         return mutations
 
     def _sharpe(self, returns: np.ndarray) -> float:
-        """Annualized Sharpe ratio (assuming daily returns)."""
+        """
+        Per-trade Sharpe ratio over the trial window.
+
+        Used only as a *relative* fitness signal for genetic selection, so it
+        is intentionally not annualized. BUGFIX (minor): the old code multiplied
+        by sqrt(365) under the assumption these were daily returns, but OMEGA
+        actually feeds per-trade PnL — making the annualization meaningless.
+        """
         if len(returns) < 5:
             return 0.0
         mean = float(np.mean(returns))
         std = float(np.std(returns, ddof=1)) + 1e-9
-        # Daily bps → annualized: ×sqrt(365) × 1e-4
-        return (mean / std) * (365 ** 0.5)
+        return mean / std
 
     def _mutate(self, genome: AgentGenome) -> Dict:
         """Apply Gaussian perturbation to hyperparameters."""

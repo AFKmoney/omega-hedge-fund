@@ -137,7 +137,10 @@ def backtest(df: pd.DataFrame, initial_equity: float, checkpoint: str | None = N
         equity_curve.append(equity)
     # Close any open position at the end
     if position != 0:
-        final_price = float(df.iloc["close" if "close" in df.columns else df.columns[-1]].iloc[-1])
+        # BUGFIX: the old expression `df.iloc["close" ...]` mixed label and
+        # positional indexing and raised TypeError. Use .loc for label access.
+        close_col = "close" if "close" in df.columns else df.columns[-1]
+        final_price = float(df[close_col].iloc[-1])
         pnl = position * (final_price - entry_price) / entry_price * equity * 0.10
         equity += pnl
         trades.append({

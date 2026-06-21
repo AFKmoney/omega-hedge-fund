@@ -15,7 +15,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import AsyncIterator, List, Optional
 
 from omega.utils.events import OrderEvent, OrderType, TimeInForce
@@ -35,7 +35,7 @@ class ChildOrder:
     slice_index: int = 0
     total_slices: int = 1
     parent_id: str = ""
-    metadata: dict = None
+    metadata: dict = field(default_factory=dict)
 
 
 class TWAP:

@@ -38,9 +38,25 @@ class ExecutionBlade:
         settings: Optional[ExecutionSettings] = None,
         sor: Optional[SmartOrderRouter] = None,
         rl_agent: Optional[ExecutionRLAgent] = None,
+        binance_api_key: str = "",
+        binance_api_secret: str = "",
+        binance_testnet: bool = False,
     ) -> None:
         self.settings = settings or ExecutionSettings()
-        self.sor = sor or SmartOrderRouter()
+        # BUGFIX: wire Binance credentials + testnet flag into the executor.
+        # Previously the blade created a default BinanceExecutor() that only
+        # worked because BinanceExecutor also reads BINANCE_* env vars — but
+        # the BINANCE_TESTNET flag was never propagated, so testnet mode could
+        # not be enabled via the orchestrator/settings path.
+        if sor is None:
+            executor = BinanceExecutor(
+                api_key=binance_api_key,
+                api_secret=binance_api_secret,
+                testnet=binance_testnet,
+            )
+            self.sor = SmartOrderRouter(executors=[executor])
+        else:
+            self.sor = sor
         self.rl_agent = rl_agent or ExecutionRLAgent(self.settings)
         self._arrival_prices: Dict[str, float] = {}
         self._open_orders: Dict[str, OrderEvent] = {}
@@ -60,9 +76,12 @@ class ExecutionBlade:
             return None
         self._arrival_prices[order.symbol] = arrival_price
         self._open_orders[order.order_id] = order
-        # Submit via SOR
+        # Submit via SOR (pass arrival price so MARKET-order notional can be
+        # estimated for algorithm selection)
         try:
-            exchange_id = await self.sor.route(order, venue="binance")
+            exchange_id = await self.sor.route(
+                order, venue="binance", reference_price=arrival_price
+            )
         except Exception as exc:
             logger.exception(f"SOR route failed: {exc}")
             return None

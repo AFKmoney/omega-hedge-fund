@@ -136,7 +136,10 @@ class RSSNewsFeed(DataSource):
             f'"symbols": [<list of mentioned tickers like BTC,ETH,SOL>]}}'
         )
         try:
-            result = subprocess.run(
+            # BUGFIX: run the blocking subprocess in a thread so it does not
+            # stall the asyncio event loop for up to 20s per headline.
+            result = await asyncio.to_thread(
+                subprocess.run,
                 [self.zai_cli_path, "chat", "-p", prompt],
                 capture_output=True,
                 text=True,
