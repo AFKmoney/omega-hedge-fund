@@ -62,6 +62,9 @@ class ExecutionBlade:
         self._open_orders: Dict[str, OrderEvent] = {}
         self._fills: List[FillEvent] = []
         self._kill_switch_active = False
+        # The active venue name (first registered executor). The blade routes
+        # all orders to this venue.
+        self.venue_name = next(iter(self.sor.executors), "binance")
 
     async def submit(self, order: OrderEvent, arrival_price: float) -> Optional[FillEvent]:
         """
@@ -80,7 +83,7 @@ class ExecutionBlade:
         # estimated for algorithm selection)
         try:
             exchange_id = await self.sor.route(
-                order, venue="binance", reference_price=arrival_price
+                order, venue=self.venue_name, reference_price=arrival_price
             )
         except Exception as exc:
             logger.exception(f"SOR route failed: {exc}")

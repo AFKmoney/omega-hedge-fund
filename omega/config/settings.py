@@ -170,6 +170,14 @@ class Settings:
     binance_api_key: str = ""
     binance_api_secret: str = ""
     binance_testnet: bool = False
+    # OKX credentials (3-part: key + secret + passphrase)
+    okx_api_key: str = ""
+    okx_api_secret: str = ""
+    okx_passphrase: str = ""
+    okx_demo: bool = False
+    # Wallet security
+    omega_totp_secret: str = ""
+    omega_daily_cap_usd: float = 500.0
     data_nexus: DataNexusSettings = field(default_factory=DataNexusSettings)
     alpha_swarm: AlphaSwarmSettings = field(default_factory=AlphaSwarmSettings)
     regime: RegimeSettings = field(default_factory=RegimeSettings)
@@ -178,7 +186,16 @@ class Settings:
     meta_cognition: MetaCognitionSettings = field(default_factory=MetaCognitionSettings)
 
     @property
+    def venue(self) -> str:
+        """Which exchange to use. OKX takes priority if its creds are set."""
+        if self.okx_api_key and self.okx_api_secret and self.okx_passphrase:
+            return "okx"
+        return "binance"
+
+    @property
     def is_live(self) -> bool:
+        if self.venue == "okx":
+            return True  # if creds present we authenticated
         return bool(self.binance_api_key and self.binance_api_secret)
 
 
@@ -230,6 +247,12 @@ def load_settings() -> Settings:
         binance_api_key=binance_api_key,
         binance_api_secret=binance_api_secret,
         binance_testnet=binance_testnet,
+        okx_api_key=os.getenv("OKX_API_KEY", ""),
+        okx_api_secret=os.getenv("OKX_API_SECRET", ""),
+        okx_passphrase=os.getenv("OKX_PASSPHRASE", ""),
+        okx_demo=os.getenv("OKX_DEMO", "").lower() in ("1", "true", "yes"),
+        omega_totp_secret=os.getenv("OMEGA_TOTP_SECRET", ""),
+        omega_daily_cap_usd=float(os.getenv("OMEGA_DAILY_CAP_USD", "500")),
         data_nexus=data_nexus,
         alpha_swarm=alpha_swarm,
         risk=risk,

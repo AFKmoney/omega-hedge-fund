@@ -25,6 +25,8 @@ from omega.config.settings import Settings, load_settings
 from omega.crowd_engine.engine import CrowdPositioningEngine
 from omega.data_nexus.nexus import DataNexus
 from omega.execution.blade import ExecutionBlade
+from omega.execution.okx_executor import OKXExecutor
+from omega.execution.sor import SmartOrderRouter
 from omega.meta_cognition.meta import MetaCognition
 from omega.regime.hmm_detector import RegimeDetector
 from omega.regime.weight_router import RegimeWeightRouter
@@ -40,8 +42,8 @@ class OmegaOrchestrator:
 
     def __init__(self, settings: Optional[Settings] = None) -> None:
         self.settings = settings or load_settings()
-        # Layer 1
-        self.data_nexus = DataNexus(self.settings.data_nexus)
+        # Layer 1 — DataNexus (venue-aware market feed)
+        self.data_nexus = self._build_data_nexus()
         # Layer 1.5 — Crowd Positioning Engine (the contrarian brain)
         self.crowd_engine = CrowdPositioningEngine(
             symbols=self.settings.data_nexus.symbols,
@@ -57,13 +59,19 @@ class OmegaOrchestrator:
         self.weight_router = RegimeWeightRouter(self.settings.regime)
         # Layer 4
         self.risk_aegis = RiskAegis(self.settings.risk)
-        # Layer 5
-        self.execution_blade = ExecutionBlade(
-            self.settings.execution,
-            binance_api_key=self.settings.binance_api_key,
-            binance_api_secret=self.settings.binance_api_secret,
-            binance_testnet=self.settings.binance_testnet,
-        )
+        # Layer 5 — venue selection: OKX if its creds are present, else Binance.
+        self.execution_blade = self._build_execution_blade()
+        # Wallet manager (withdrawals) — only on OKX for now
+        self.wallet_manager = None
+        if self.settings.venue == "okx":
+            from omega.execution.wallet_manager import WalletManager
+            executor = self.execution_blade.sor.get_venue("okx")
+            if executor is not None:
+                self.wallet_manager = WalletManager(
+                    executor,
+                    totp_secret=self.settings.omega_totp_secret,
+                    daily_cap_usd=self.settings.omega_daily_cap_usd,
+                )
         # Layer 6
         self.meta_cognition = MetaCognition(self.settings.meta_cognition)
         # State
@@ -203,6 +211,37 @@ class OmegaOrchestrator:
         signals = self.alpha_swarm.on_positioning(event)
         if signals:
             asyncio.create_task(self._process_signals(signals, event.timestamp))
+
+    def _build_execution_blade(self) -> ExecutionBlade:
+        """Build the execution blade for the active venue (OKX or Binance)."""
+        if self.settings.venue == "okx":
+            executor = OKXExecutor(
+                api_key=self.settings.okx_api_key,
+                api_secret=self.settings.okx_api_secret,
+                passphrase=self.settings.okx_passphrase,
+                demo=self.settings.okx_demo,
+            )
+            sor = SmartOrderRouter(executors=[executor])
+            blade = ExecutionBlade(self.settings.execution, sor=sor)
+            logger.info(
+                f"Execution venue: OKX ({'demo' if self.settings.okx_demo else 'live'})",
+                extra={"component": "orchestrator"},
+            )
+            return blade
+        return ExecutionBlade(
+            self.settings.execution,
+            binance_api_key=self.settings.binance_api_key,
+            binance_api_secret=self.settings.binance_api_secret,
+            binance_testnet=self.settings.binance_testnet,
+        )
+
+    def _build_data_nexus(self) -> DataNexus:
+        """Build DataNexus with the venue-appropriate market feed."""
+        if self.settings.venue == "okx":
+            from omega.data_nexus.okx_feed import OKXWebSocketFeed
+            okx_feed = OKXWebSocketFeed(symbols=self.settings.data_nexus.symbols, swap=True)
+            return DataNexus(self.settings.data_nexus, binance_feed=okx_feed)
+        return DataNexus(self.settings.data_nexus)
 
     def _apply_regime_weights(self) -> None:
         """Push the current HMM regime's weights into the debate chamber."""

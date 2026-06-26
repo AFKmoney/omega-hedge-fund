@@ -18,6 +18,25 @@ class Executor(abc.ABC):
     """One execution venue (exchange)."""
 
     venue: str = "abstract"
+    dry_run: bool = True
+
+    @abc.abstractmethod
+    async def submit(self, order: OrderEvent) -> str:
+        """Submit an order. Returns the exchange order id (or a dry-run id)."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def cancel(self, exchange_order_id: str) -> bool:
+        """Cancel an order by exchange id. Returns True if cancelled."""
+        raise NotImplementedError
+
+    async def get_balance(self, ccy: str = "USDT") -> float:
+        """Return the available balance for a currency. Default 0 if unsupported."""
+        return 0.0
+
+    async def close(self) -> None:
+        """Release any resources (HTTP session, etc). Override if needed."""
+        return None
 
     @abc.abstractmethod
     async def submit(self, order: OrderEvent) -> str:
