@@ -61,14 +61,38 @@ class OmegaOrchestrator:
         self.risk_aegis = RiskAegis(self.settings.risk)
         # Layer 5 — venue selection: OKX if its creds are present, else Binance.
         self.execution_blade = self._build_execution_blade()
-        # Wallet manager (withdrawals) — only on OKX for now
+        # Wallet manager (withdrawals) — only on OKX. Uses the SEPARATE
+        # withdrawal API key (different from the trading key) for security:
+        # a compromised trading key cannot withdraw.
         self.wallet_manager = None
         if self.settings.venue == "okx":
             from omega.execution.wallet_manager import WalletManager
-            executor = self.execution_blade.sor.get_venue("okx")
-            if executor is not None:
+            from omega.config.keystore import get_keystore
+            ks = get_keystore()
+            # Prefer the dedicated withdrawal key; fall back to the trading key
+            # if no separate withdrawal key is configured (with a warning).
+            w_key = ks.get("okx_withdraw_key")
+            w_secret = ks.get("okx_withdraw_secret")
+            w_pass = ks.get("okx_withdraw_passphrase")
+            if w_key and w_secret and w_pass:
+                wallet_executor = OKXExecutor(
+                    api_key=w_key, api_secret=w_secret, passphrase=w_pass,
+                    demo=self.settings.okx_demo,
+                )
+            else:
+                # Fall back to the trading key (less secure — it has withdrawal
+                # permission on the same key). Log a recommendation to split.
+                wallet_executor = self.execution_blade.sor.get_venue("okx")
+                logger.warning(
+                    "No separate withdrawal key configured — using the trading "
+                    "key for withdrawals. For better security, create a second "
+                    "OKX API key with ONLY withdrawal permission and run: "
+                    "python -m omega.cli.keys set okx_withdraw_key <key>",
+                    extra={"component": "orchestrator"},
+                )
+            if wallet_executor is not None:
                 self.wallet_manager = WalletManager(
-                    executor,
+                    wallet_executor,
                     totp_secret=self.settings.omega_totp_secret,
                     daily_cap_usd=self.settings.omega_daily_cap_usd,
                 )

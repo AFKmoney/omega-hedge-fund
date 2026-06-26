@@ -200,7 +200,13 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    """Load settings from environment variables with production defaults."""
+    """Load settings from the KeyStore (persistent) + environment variables."""
+    # Apply persistent keystore credentials to env first, so the rest reads them
+    try:
+        from omega.config.keystore import get_keystore
+        get_keystore().apply_to_env()
+    except Exception:
+        pass  # never let keystore issues block startup
     env = os.getenv("OMEGA_ENV", "dev")
     log_level = os.getenv("OMEGA_LOG_LEVEL", "INFO")
     data_dir = _default_data_dir()
