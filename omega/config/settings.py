@@ -109,10 +109,11 @@ class RegimeSettings:
     # Regime labels (index-aligned): 0=calm bull, 1=volatile bull, 2=choppy, 3=bear
     agent_weight_matrix_path: str = "config/regime_weights.json"
     default_weights: Dict[str, float] = field(default_factory=lambda: {
-        "ppo_trend": 0.40,
-        "ppo_meanrev": 0.20,
-        "llm_macro": 0.25,
+        "ppo_trend": 0.35,
+        "ppo_meanrev": 0.15,
+        "llm_macro": 0.20,
         "stat_arb": 0.15,
+        "contrarian": 0.15,
     })
 
 

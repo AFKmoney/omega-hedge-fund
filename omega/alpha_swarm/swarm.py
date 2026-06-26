@@ -16,13 +16,15 @@ import asyncio
 from typing import List, Optional
 
 from omega.alpha_swarm.base import AlphaAgent
+from omega.alpha_swarm.contrarian_agent import ContrarianAgent
 from omega.alpha_swarm.debate_chamber import DebateChamber
 from omega.alpha_swarm.llm_macro_agent import LLMMacroAgent
 from omega.alpha_swarm.ppo_agent import PPOAgent
 from omega.alpha_swarm.stat_arb_agent import StatArbAgent
 from omega.config.settings import AlphaSwarmSettings, RegimeSettings
 from omega.utils.events import (
-    MacroEvent, MarketEvent, NewsEvent, OnChainEvent, SignalEvent,
+    CrowdPositioningEvent, MacroEvent, MarketEvent, NewsEvent, OnChainEvent,
+    SignalEvent,
 )
 from omega.utils.logger import get_logger
 
@@ -51,12 +53,14 @@ class AlphaSwarm:
         self._consolidated_queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
 
     def _default_agents(self) -> List[AlphaAgent]:
-        """Construct the default swarm: PPO trend + PPO meanrev + LLM macro + stat-arb."""
+        """Construct the default swarm: PPO trend + PPO meanrev + LLM macro +
+        stat-arb + contrarian (fades crowd-positioning extremes)."""
         return [
             PPOAgent(self.symbols, mode="trend", settings=self.alpha_settings),
             PPOAgent(self.symbols, mode="meanrev", settings=self.alpha_settings),
             LLMMacroAgent(self.symbols, settings=self.alpha_settings),
             StatArbAgent(self.symbols, settings=self.alpha_settings),
+            ContrarianAgent(self.symbols),
         ]
 
     async def start(self) -> None:
@@ -109,6 +113,23 @@ class AlphaSwarm:
         for agent in self.agents:
             raw.extend(agent.on_onchain(event))
         return self._submit_to_debate(raw)
+
+    def on_positioning(self, event: CrowdPositioningEvent) -> List[SignalEvent]:
+        """Route a CrowdPositioningEvent to the ContrarianAgent and any other
+        agent that reacts to crowd positioning."""
+        raw_signals: List[SignalEvent] = []
+        for agent in self.agents:
+            handler = getattr(agent, "on_positioning", None)
+            if handler is None:
+                continue
+            try:
+                raw_signals.extend(handler(event))
+            except Exception as exc:
+                logger.warning(
+                    f"Agent {agent.name} crashed on positioning event: {exc}",
+                    extra={"component": "alpha_swarm", "agent": agent.name},
+                )
+        return self._submit_to_debate(raw_signals)
 
     def _submit_to_debate(self, raw_signals: List[SignalEvent]) -> List[SignalEvent]:
         """Submit each raw signal to the debate chamber; collect decisions."""

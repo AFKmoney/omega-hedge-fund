@@ -22,13 +22,14 @@ from typing import Optional
 
 from omega.alpha_swarm.swarm import AlphaSwarm
 from omega.config.settings import Settings, load_settings
+from omega.crowd_engine.engine import CrowdPositioningEngine
 from omega.data_nexus.nexus import DataNexus
 from omega.execution.blade import ExecutionBlade
 from omega.meta_cognition.meta import MetaCognition
 from omega.regime.hmm_detector import RegimeDetector
 from omega.regime.weight_router import RegimeWeightRouter
 from omega.risk_aegis.aegis import RiskAegis
-from omega.utils.events import MarketEvent, SignalEvent
+from omega.utils.events import CrowdPositioningEvent, MarketEvent, SignalEvent
 from omega.utils.logger import get_logger
 
 logger = get_logger("omega.orchestrator")
@@ -41,6 +42,10 @@ class OmegaOrchestrator:
         self.settings = settings or load_settings()
         # Layer 1
         self.data_nexus = DataNexus(self.settings.data_nexus)
+        # Layer 1.5 — Crowd Positioning Engine (the contrarian brain)
+        self.crowd_engine = CrowdPositioningEngine(
+            symbols=self.settings.data_nexus.symbols,
+        )
         # Layer 2
         self.alpha_swarm = AlphaSwarm(
             symbols=self.settings.data_nexus.symbols,
@@ -64,6 +69,7 @@ class OmegaOrchestrator:
         # State
         self._running = False
         self._last_regime: str = "unknown"
+        self._last_crowd_regime: str = "neutral"
         self._signal_count = 0
         self._order_count = 0
         self._fill_count = 0
@@ -86,6 +92,7 @@ class OmegaOrchestrator:
         )
         # Bring up layers in order
         await self.alpha_swarm.start()
+        await self.crowd_engine.start()
         await self.meta_cognition.start_background()
         await self.data_nexus.start()
         # Spawn the main event loop
@@ -108,6 +115,7 @@ class OmegaOrchestrator:
             except Exception as exc:
                 logger.warning(f"Loop task shutdown error: {exc}")
         await self.alpha_swarm.stop()
+        await self.crowd_engine.stop()
         await self.meta_cognition.stop_background()
         await self.data_nexus.stop()
         await self.execution_blade.close()
@@ -144,14 +152,19 @@ class OmegaOrchestrator:
             raise
 
     async def _on_market(self, event: MarketEvent) -> None:
-        """Handle a MarketEvent: regime → risk tracking → alpha swarm → risk → execution."""
-        # 1. Regime detection
+        """Handle a MarketEvent: regime → crowd engine → risk → alpha swarm → risk → execution."""
+        # 1. Regime detection (HMM)
         regime = self.regime_detector.on_market(event)
         if regime is not None and regime != self._last_regime:
             self._last_regime = regime
-            weights = self.weight_router.weights_for(regime)
-            self.alpha_swarm.set_regime_weights(weights)
-        # 2. Feed Risk Aegis with market data so it can:
+            self._apply_regime_weights()
+        # 2. Crowd Positioning Engine — produces CrowdPositioningEvent when the
+        #    crowd is at an extreme. This reconfigures agent weights (defund
+        #    trend at a cascade-imminent extreme) and feeds the ContrarianAgent.
+        crowd_event = self.crowd_engine.on_market(event)
+        if crowd_event is not None:
+            self._on_crowd_positioning(crowd_event)
+        # 3. Feed Risk Aegis with market data so it can:
         #    - track last prices (used for position sizing in _process_signals)
         #    - feed the Monte Carlo return pool
         #    - feed the portfolio-heat correlation matrix
@@ -159,11 +172,39 @@ class OmegaOrchestrator:
         # BUGFIX: previously this was never called, so _process_signals always
         # skipped every signal because portfolio_heat._last_prices was empty.
         self.risk_aegis.on_market(event)
-        # 3. Update meta-cognition with price (for MFE/MAE tracking)
+        # 4. Update meta-cognition with price (for MFE/MAE tracking)
         self.meta_cognition.update_price(event.symbol, event.last_price)
-        # 4. Alpha swarm produces signals
+        # 5. Alpha swarm produces signals
         signals = self.alpha_swarm.on_market(event)
         await self._process_signals(signals, event.timestamp)
+
+    def _on_crowd_positioning(self, event: CrowdPositioningEvent) -> None:
+        """React to a CrowdPositioningEvent: reconfigure regime weights if the
+        crowd is at a cascade-imminent extreme, then feed the ContrarianAgent."""
+        crowd_regime = (
+            f"crowd_cascade_{'long' if event.crowd_score > 0 else 'short'}"
+            if event.regime_hint == "cascade_imminent"
+            else "neutral"
+        )
+        if crowd_regime != self._last_crowd_regime:
+            self._last_crowd_regime = crowd_regime
+            if crowd_regime != "neutral":
+                # Cascade override: defund trend, boost contrarian
+                weights = self.weight_router.weights_for(crowd_regime)
+                self.alpha_swarm.set_regime_weights(weights)
+            else:
+                # Restore the HMM-driven regime weights
+                self._apply_regime_weights()
+        # Feed the contrarian agent (and any agent that reacts to positioning)
+        signals = self.alpha_swarm.on_positioning(event)
+        if signals:
+            asyncio.create_task(self._process_signals(signals, event.timestamp))
+
+    def _apply_regime_weights(self) -> None:
+        """Push the current HMM regime's weights into the debate chamber."""
+        if self._last_regime and self._last_regime != "unknown":
+            weights = self.weight_router.weights_for(self._last_regime)
+            self.alpha_swarm.set_regime_weights(weights)
 
     async def _process_signals(self, signals, timestamp: str) -> None:
         """Pass signals through Risk Aegis → Execution Blade."""
@@ -202,6 +243,8 @@ class OmegaOrchestrator:
             "signals_processed": self._signal_count,
             "orders_sent": self._order_count,
             "fills_received": self._fill_count,
+            "crowd_regime": self._last_crowd_regime,
+            "crowd_engine": self.crowd_engine.stats(),
             "alpha_swarm": self.alpha_swarm.stats(),
             "risk_aegis": self.risk_aegis.stats(),
             "execution": self.execution_blade.stats(),

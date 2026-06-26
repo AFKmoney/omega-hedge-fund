@@ -181,3 +181,31 @@ class TradeClosedEvent:
     regime: str = ""
     exit_reason: str = ""         # take_profit | stop_loss | signal_exit | kill_switch
     autopsy: Dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class CrowdPositioningEvent:
+    """
+    Crowd Positioning Engine output — Layer 1.5.
+
+    The normalized signal that encodes where the retail crowd is overcrowded.
+    This is the event the Alpha Swarm's ContrarianAgent fades.
+
+    Thesis: 80% of traders lose because they pile into overcrowded extremes at
+    the worst moment, then get liquidated in the inverse cascade. This event
+    quantifies that extreme so we can take the other side.
+
+    crowd_score > 0  -> crowd is overcrowded LONG  -> we SHORT (fade)
+    crowd_score < 0  -> crowd is overcrowded SHORT -> we LONG
+    conviction is reduced when the component signals disagree (an extreme on
+    funding alone but neutral sentiment is a weak setup).
+    """
+    symbol: str
+    timestamp: str
+    crowd_score: float            # [-1, +1] + = crowd long overcrowded, - = short overcrowded
+    conviction: float             # [0, 1] statistical significance of the extreme
+    horizon: str                  # "minutes" | "hours" | "days"
+    components: Dict = field(default_factory=dict)
+    # e.g. {"funding": +0.8, "ls_ratio": +0.6, "sentiment": +0.4}
+    regime_hint: str = "neutral"  # cascade_imminent | euphoria | fear | neutral
+    expected_move_bps: float = 0.0  # expected size of the inverse move
