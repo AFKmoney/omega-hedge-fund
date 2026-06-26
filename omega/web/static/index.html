@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OMEGA — Hedge Fund Control</title>
+<style>
+:root{
+  --bg-0:#05060f; --bg-1:#0a0e1f; --glass:rgba(255,255,255,0.045);
+  --glass-brd:rgba(255,255,255,0.08); --txt:#e8eaf6; --txt-dim:#7a82a8;
+  --accent:#5b8cff; --accent-2:#9b6dff; --green:#22d39a; --red:#ff4d6d;
+  --amber:#ffb547; --radius:16px; --blur:18px;
+}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,-apple-system,sans-serif}
+body{
+  background:var(--bg-0);color:var(--txt);min-height:100vh;overflow-x:hidden;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 20% -10%,rgba(91,140,255,.12),transparent),
+    radial-gradient(ellipse 60% 50% at 90% 10%,rgba(155,109,255,.10),transparent),
+    radial-gradient(ellipse 70% 60% at 50% 110%,rgba(34,211,154,.06),transparent);
+}
+.glass{
+  background:var(--glass);border:1px solid var(--glass-brd);
+  backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));
+  border-radius:var(--radius);
+}
+/* Top bar */
+.topbar{
+  position:sticky;top:0;z-index:100;display:flex;align-items:center;gap:16px;
+  padding:12px 24px;border-bottom:1px solid var(--glass-brd);
+  background:rgba(5,6,15,.7);backdrop-filter:blur(20px);
+}
+.logo{font-size:22px;font-weight:700;letter-spacing:2px;
+  background:linear-gradient(135deg,var(--accent),var(--accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo span{font-weight:300;font-size:14px;color:var(--txt-dim);-webkit-text-fill-color:var(--txt-dim)}
+.nav{display:flex;gap:4px;flex:1}
+.nav button{
+  background:none;border:none;color:var(--txt-dim);cursor:pointer;
+  padding:8px 16px;border-radius:10px;font-size:13px;transition:.2s
+}
+.nav button:hover{background:var(--glass);color:var(--txt)}
+.nav button.active{background:var(--glass);color:var(--accent)}
+.status-pill{
+  display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;
+  font-size:12px;font-weight:600;letter-spacing:.5px
+}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--txt-dim)}
+.dot.live{background:var(--green);box-shadow:0 0 8px var(--green)}
+.dot.dry{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+/* Layout */
+.main{padding:24px;max-width:1600px;margin:0 auto}
+.view{display:none}.view.active{display:block}
+.grid{display:grid;gap:20px}
+.card{padding:22px}
+.card h3{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:var(--txt-dim);margin-bottom:14px}
+/* Metric */
+.metric{font-size:32px;font-weight:700;letter-spacing:-1px}
+.metric-sub{font-size:12px;color:var(--txt-dim);margin-top:4px}
+.pos{color:var(--green)}.neg{color:var(--red)}
+/* Signal bars */
+.signal-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.signal-name{width:120px;font-size:12px;color:var(--txt-dim)}
+.signal-bar{flex:1;height:8px;background:rgba(255,255,255,.05);border-radius:4px;position:relative;overflow:hidden}
+.signal-fill{position:absolute;top:0;height:100%;border-radius:4px;transition:width .5s,background .5s;left:50%}
+.signal-val{width:50px;text-align:right;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+/* Agent chips */
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;
+  background:var(--glass);font-size:11px;margin:2px;border:1px solid var(--glass-brd)}
+/* Buttons */
+.btn{
+  padding:10px 18px;border-radius:10px;border:1px solid var(--glass-brd);
+  background:var(--glass);color:var(--txt);cursor:pointer;font-size:13px;font-weight:600;transition:.2s
+}
+.btn:hover{background:rgba(255,255,255,.08)}
+.btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));border:none}
+.btn.primary:hover{opacity:.9}
+.btn.danger{background:rgba(255,77,109,.15);border-color:rgba(255,77,109,.3);color:var(--red)}
+.btn.danger:hover{background:rgba(255,77,109,.25)}
+.btn.green{background:rgba(34,211,154,.15);border-color:rgba(34,211,154,.3);color:var(--green)}
+/* Inputs */
+input,select{
+  width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--glass-brd);
+  background:rgba(0,0,0,.25);color:var(--txt);font-size:13px;outline:none
+}
+input:focus{border-color:var(--accent)}
+label{font-size:11px;color:var(--txt-dim);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:1px}
+.form-row{margin-bottom:14px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--txt-dim);font-weight:600;font-size:11px;text-transform:uppercase;
+  letter-spacing:1px;padding:8px 12px;border-bottom:1px solid var(--glass-brd)}
+td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.03)}
+/* Toast */
+.toast{position:fixed;bottom:24px;right:24px;z-index:999;padding:14px 20px;border-radius:12px;
+  font-size:13px;font-weight:600;opacity:0;transform:translateY(20px);transition:.3s;max-width:400px}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.ok{background:rgba(34,211,154,.15);border:1px solid rgba(34,211,154,.3)}
+.toast.err{background:rgba(255,77,109,.15);border:1px solid rgba(255,77,109,.3)}
+@media(max-width:768px){.nav{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+
+<div class="topbar glass">
+  <div class="logo">OMEGA <span>Hedge Fund</span></div>
+  <nav class="nav">
+    <button class="active" onclick="show('dashboard')">Dashboard</button>
+    <button onclick="show('crowd')">Crowd Engine</button>
+    <button onclick="show('swarm')">Alpha Swarm</button>
+    <button onclick="show('risk')">Risk</button>
+    <button onclick="show('wallet')">Wallet</button>
+    <button onclick="show('profiles')">Profiles</button>
+    <button onclick="show('settings')">Settings</button>
+  </nav>
+  <div class="status-pill glass">
+    <div class="dot" id="statusDot"></div>
+    <span id="statusText">Connecting…</span>
+  </div>
+</div>
+
+<div class="main">
+  <!-- DASHBOARD -->
+  <div class="view active" id="view-dashboard">
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+      <div class="card glass"><h3>Balance (USDT)</h3><div class="metric" id="m-balance">—</div><div class="metric-sub" id="m-venue">venue: —</div></div>
+      <div class="card glass"><h3>P&amp;L (session)</h3><div class="metric" id="m-pnl">—</div><div class="metric-sub">realized + unrealized</div></div>
+      <div class="card glass"><h3>Open Positions</h3><div class="metric" id="m-positions">0</div><div class="metric-sub" id="m-posdetail"></div></div>
+      <div class="card glass"><h3>Crowd Regime</h3><div class="metric" id="m-crowd" style="font-size:20px">neutral</div><div class="metric-sub" id="m-crowdev">0 events</div></div>
+    </div>
+    <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:20px">
+      <div class="card glass">
+        <h3>Trading Control</h3>
+        <div style="display:flex;gap:12px;margin-top:8px">
+          <button class="btn green" onclick="api('POST','/api/trading/start',{}).then(r=>toast('Trading started'))">Start</button>
+          <button class="btn danger" onclick="api('POST','/api/trading/stop',{}).then(r=>toast('Trading stopped'))">Stop</button>
+          <div style="flex:1"></div>
+          <div class="metric-sub" style="align-self:center">Signals: <b id="m-signals">0</b> · Orders: <b id="m-orders">0</b> · Fills: <b id="m-fills">0</b></div>
+        </div>
+      </div>
+      <div class="card glass">
+        <h3>Positions</h3>
+        <table><thead><tr><th>Symbol</th><th>Side</th><th>Size</th><th>uPnL</th></tr></thead>
+        <tbody id="posTable"><tr><td colspan="4" style="color:var(--txt-dim)">No open positions</td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- CROWD ENGINE -->
+  <div class="view" id="view-crowd">
+    <div class="card glass">
+      <h3>Crowd Positioning — 8 Signals (live)</h3>
+      <div id="crowdSignals" style="margin-top:10px"></div>
+    </div>
+    <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:20px">
+      <div class="card glass"><h3>Fusion Weights (V4 auto-tuned)</h3><div id="crowdWeights"></div></div>
+      <div class="card glass"><h3>Engine Stats</h3><div id="crowdStats"></div></div>
+    </div>
+  </div>
+
+  <!-- ALPHA SWARM -->
+  <div class="view" id="view-swarm">
+    <div class="card glass">
+      <h3>Agents</h3>
+      <div id="agentList" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+    </div>
+    <div class="card glass" style="margin-top:20px"><h3>Regime Weights</h3><div id="regimeWeights"></div></div>
+  </div>
+
+  <!-- RISK -->
+  <div class="view" id="view-risk">
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+      <div class="card glass"><h3>Kill Switch</h3><div class="metric" id="r-kill" style="font-size:20px">—</div></div>
+      <div class="card glass"><h3>Kelly Fraction</h3><div class="metric" id="r-kelly">—</div></div>
+      <div class="card glass"><h3>Max Drawdown</h3><div class="metric" id="r-dd">—</div></div>
+      <div class="card glass"><h3>Equity</h3><div class="metric" id="r-equity">—</div></div>
+    </div>
+  </div>
+
+  <!-- WALLET -->
+  <div class="view" id="view-wallet">
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <div class="card glass">
+        <h3>Wallet Status</h3>
+        <div id="walletStatus"></div>
+        <div style="display:flex;gap:10px;margin-top:16px">
+          <button class="btn danger" onclick="api('POST','/api/wallet/panic',{}).then(()=>toast('PANIC ENGAGED'))">🚨 PANIC</button>
+        </div>
+      </div>
+      <div class="card glass">
+        <h3>Withdraw Funds</h3>
+        <div class="form-row"><label>Amount</label><input id="w-amt" placeholder="100"></div>
+        <div class="form-row"><label>Currency</label><input id="w-ccy" value="USDT"></div>
+        <div class="form-row"><label>Destination Address</label><input id="w-addr" placeholder="0x..."></div>
+        <div class="form-row"><label>Chain</label><input id="w-chain" placeholder="ETH-ERC20"></div>
+        <div class="form-row"><label>TOTP Code (from phone)</label><input id="w-totp" placeholder="123456" maxlength="6"></div>
+        <button class="btn primary" onclick="doWithdraw()">Withdraw</button>
+      </div>
+    </div>
+    <div class="card glass" style="margin-top:20px">
+      <h3>Change Daily Cap</h3>
+      <div style="display:flex;gap:10px;align-items:flex-end">
+        <div style="flex:1"><label>New Cap (USD)</label><input id="cap-val" placeholder="500"></div>
+        <div><label>TOTP</label><input id="cap-totp" placeholder="123456" maxlength="6"></div>
+        <button class="btn" onclick="api('POST','/api/wallet/set-cap',{cap:parseFloat(capVal.value),totp:capTotp.value}).then(r=>r.ok?toast('Cap updated'):toast('Bad TOTP','err'))">Set</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROFILES -->
+  <div class="view" id="view-profiles">
+    <div class="card glass">
+      <h3>Credential Profiles</h3>
+      <table><thead><tr><th></th><th>Name</th><th>Venue</th><th>Mode</th><th>Fields</th><th></th></tr></thead>
+      <tbody id="profileTable"></tbody></table>
+    </div>
+    <div class="card glass" style="margin-top:20px">
+      <h3>Add Profile</h3>
+      <div style="display:flex;gap:10px;align-items:flex-end">
+        <div style="flex:1"><label>Profile Name</label><input id="p-name" placeholder="live-okx"></div>
+        <div style="flex:1"><label>OKX API Key</label><input id="p-key"></div>
+        <div style="flex:1"><label>OKX Secret</label><input id="p-secret" type="password"></div>
+        <div style="flex:1"><label>Passphrase</label><input id="p-pass" type="password"></div>
+        <button class="btn primary" onclick="addProfile()">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="view" id="view-settings">
+    <div class="card glass">
+      <h3>Keystore (individual keys)</h3>
+      <div id="keysList"></div>
+    </div>
+    <div class="card glass" style="margin-top:20px">
+      <h3>Set a Key</h3>
+      <div style="display:flex;gap:10px;align-items:flex-end">
+        <div style="flex:1"><label>Key Name</label><input id="k-name" placeholder="okx_api_key"></div>
+        <div style="flex:1"><label>Value</label><input id="k-val" type="password"></div>
+        <button class="btn primary" onclick="api('POST','/api/keys/set',{key:kName.value,value:kVal.value}).then(()=>{toast('Key saved');loadKeys()})">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+async function api(method,path,body){
+  try{
+    const r=await fetch(path,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+    return await r.json();
+  }catch(e){toast('Network error: '+e.message,'err');return{}}
+}
+function toast(msg,type='ok'){
+  const t=$('toast');t.textContent=msg;t.className='toast '+type+' show';
+  clearTimeout(window._tt);window._tt=setTimeout(()=>t.className='toast',3000);
+}
+function show(v){
+  document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));
+  $('view-'+v).classList.add('active');
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+  [...document.querySelectorAll('.nav button')].find(b=>b.textContent.toLowerCase().includes(v))?.classList.add('active');
+}
+// Live WS
+function connectWS(){
+  const proto=location.protocol==='https:'?'wss':'ws';
+  const ws=new WebSocket(proto+'://'+location.host+'/ws/live');
+  ws.onmessage=e=>{
+    try{const d=JSON.parse(e.data);updateLive(d)}catch(err){}
+  };
+  ws.onclose=()=>setTimeout(connectWS,3000);
+}
+function updateLive(d){
+  if(d.status){
+    $('m-signals').textContent=d.status.signals||0;
+    $('m-orders').textContent=d.status.orders||0;
+    $('m-fills').textContent=d.status.fills||0;
+    $('m-crowd').textContent=d.status.crowd_regime||'neutral';
+    const dot=$('statusDot');const txt=$('statusText');
+    if(d.status.running){dot.className='dot live';txt.textContent='LIVE'}else{dot.className='dot dry';txt.textContent='IDLE'}
+  }
+  if(d.balance!=null)$('m-balance').textContent='$'+Number(d.balance).toLocaleString(undefined,{maximumFractionDigits:2});
+  if(d.crowd){
+    $('m-crowdev').textContent=(d.crowd.events_emitted||0)+' events';
+    renderCrowd(d.crowd);
+  }
+}
+function renderCrowd(c){
+  const sigs=c.signals||{};const cont=$('crowdSignals');cont.innerHTML='';
+  const weights=c.weights||{};
+  for(const[name,info]of Object.entries(sigs)){
+    let score=0;if(info&&typeof info==='object'){const r=info.raw||{};score=r.score||0}
+    const w=weights[name]||0;
+    const row=document.createElement('div');row.className='signal-row';
+    const pct=Math.abs(score)*50;const dir=score>=0?1:-1;
+    const color=score>0.3?'var(--red)':score<-0.3?'var(--green)':'var(--txt-dim)';
+    row.innerHTML=`
+      <div class="signal-name">${name}</div>
+      <div class="signal-bar"><div class="signal-fill" style="width:${pct}%;background:${color};${dir<0?'right:50%;left:auto;':''}"></div></div>
+      <div class="signal-val">${score.toFixed(2)}</div>`;
+    cont.appendChild(row);
+  }
+  // weights
+  const ww=$('crowdWeights');ww.innerHTML='<table>';
+  for(const[n,w]of Object.entries(weights)){
+    ww.innerHTML+=`<tr><td>${n}</td><td>${w.toFixed(3)}</td></tr>`;
+  }
+  ww.innerHTML+='</table>';
+  // stats
+  $('crowdStats').innerHTML=`<div class="metric-sub">Events emitted: <b>${c.events_emitted||0}</b></div>
+    <div class="metric-sub">Symbols: ${(c.symbols||[]).join(', ')}</div>`;
+}
+async function loadProfiles(){
+  const r=await api('GET','/api/profiles');
+  const tb=$('profileTable');tb.innerHTML='';
+  (r.profiles||[]).forEach(p=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${p.active?'▶':''}</td><td>${p.name}</td><td>${p.venue}</td>
+      <td>${p.demo?'demo':'live'}</td><td>${p.field_count}</td>
+      <td><button class="btn" onclick="useProfile('${p.name}')">Use</button>
+      <button class="btn danger" onclick="delProfile('${p.name}')">Del</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+async function useProfile(n){const r=await api('POST','/api/profiles/use',{name:n});toast(r.ok?'Switched to '+n:'Not found');loadProfiles()}
+async function delProfile(n){await api('DELETE','/api/profiles/'+n);toast('Deleted '+n);loadProfiles()}
+async function addProfile(){
+  const r=await api('POST','/api/profiles/add',{name:pName.value,fields:{okx_api_key:pKey.value,okx_api_secret:pSecret.value,okx_passphrase:pPass.value}});
+  toast(r.ok?'Profile added':'Failed');loadProfiles();
+}
+async function loadKeys(){
+  const r=await api('GET','/api/keys');
+  const kl=$('keysList');kl.innerHTML='<table><thead><tr><th>Field</th><th>Set</th><th>Profile</th></tr></thead><tbody>';
+  for(const[profile,fields]of Object.entries(r.profiles||{})){
+    for(const[f,info]of Object.entries(fields)){
+      kl.innerHTML+=`<tr><td>${f}</td><td>${info.set?'✓':'✗'}</td><td>${profile}</td></tr>`;
+    }
+  }
+  kl.innerHTML+='</tbody></table>';
+}
+async function doWithdraw(){
+  const r=await api('POST','/api/wallet/withdraw',{ccy:wCcy.value,amount:parseFloat(wAmt.value),address:wAddr.value,chain:wChain.value,totp:wTotp.value});
+  if(r.ok)toast('Withdrawal submitted ✓');else toast('Blocked: '+(r.reason||r.error||'unknown'),'err');
+}
+// Init
+connectWS();
+loadProfiles();loadKeys();
+setInterval(()=>{api('GET','/api/positions').then(r=>{if(Array.isArray(r))renderPositions(r)})},5000);
+setInterval(()=>{api('GET','/api/status').then(s=>{if(s.venue)$('m-venue').textContent='venue: '+s.venue+(s.okx_demo?' (demo)':'')})},5000);
+function renderPositions(pos){
+  const tb=$('posTable');tb.innerHTML='';
+  $('m-positions').textContent=pos.length;
+  if(!pos.length){tb.innerHTML='<tr><td colspan="4" style="color:var(--txt-dim)">No open positions</td></tr>';return}
+  pos.slice(0,8).forEach(p=>{
+    const inst=p.instId||'?';const sz=parseFloat(p.pos||0);const uPnL=parseFloat(p.upl||0);
+    const side=sz>0?'LONG':sz<0?'SHORT':'FLAT';
+    tb.innerHTML+=`<tr><td>${inst}</td><td>${side}</td><td>${sz}</td><td class="${uPnL>=0?'pos':'neg'}">${uPnL.toFixed(2)}</td></tr>`;
+  });
+}
+</script>
+</body>
+</html>
