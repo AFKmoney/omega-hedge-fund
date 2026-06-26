@@ -31,6 +31,8 @@ from typing import Dict, List, Optional
 from omega.crowd_engine.optimizer import CrowdWeightOptimizer
 from omega.crowd_engine.signals.base import PositioningSignal, SignalReading
 from omega.crowd_engine.signals.funding_signal import FundingRateSignal
+from omega.crowd_engine.signals.iceberg_signal import IcebergDetectionSignal
+from omega.crowd_engine.signals.inflow_signal import OnChainInflowSignal
 from omega.crowd_engine.signals.liquidation_signal import LiquidationSignal
 from omega.crowd_engine.signals.ls_ratio_signal import LSRatioSignal
 from omega.crowd_engine.signals.open_interest_signal import OpenInterestSignal
@@ -60,6 +62,8 @@ class CrowdPositioningEngine:
         open_interest: Optional[OpenInterestSignal] = None,
         liquidations: Optional[LiquidationSignal] = None,
         social: Optional[SocialSentimentSignal] = None,
+        iceberg: Optional[IcebergDetectionSignal] = None,
+        inflow: Optional[OnChainInflowSignal] = None,
         # Min |score| to emit an event at all (avoid spamming on noise)
         emit_threshold: float = 0.20,
         # Move in |score| required to re-emit for an already-extreme symbol
@@ -75,6 +79,9 @@ class CrowdPositioningEngine:
         self.open_interest = open_interest or OpenInterestSignal(symbols=self.symbols)
         self.liquidations = liquidations or LiquidationSignal(symbols=self.symbols)
         self.social = social or SocialSentimentSignal()
+        # V5 microstructure + on-chain signals
+        self.iceberg = iceberg or IcebergDetectionSignal()
+        self.inflow = inflow or OnChainInflowSignal(symbols=self.symbols)
         # Ordered signal registry — the fusion iterates this list. Adding a new
         # signal means appending here + giving it a fusion weight.
         self._signals: List[PositioningSignal] = [
@@ -84,6 +91,8 @@ class CrowdPositioningEngine:
             self.ls_ratio,
             self.sentiment,
             self.social,
+            self.iceberg,        # microstructure (passive depth analysis)
+            self.inflow,         # on-chain selling pressure
         ]
         self.emit_threshold = emit_threshold
         self.reemit_delta = reemit_delta
@@ -155,6 +164,8 @@ class CrowdPositioningEngine:
         # Feed funding rate into the funding signal (the only reactive signal;
         # the others poll/stream independently)
         self.funding.update(sym, event.funding_rate)
+        # Feed depth snapshots into the iceberg detector (passive microstructure)
+        self.iceberg.update_from_market(event)
         return self._compute_event(sym, event.timestamp)
 
     def _compute_event(self, symbol: str, timestamp: str) -> Optional[CrowdPositioningEvent]:

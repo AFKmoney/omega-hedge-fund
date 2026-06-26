@@ -48,7 +48,7 @@ class CrowdWeightOptimizer:
         self,
         signal_names: Tuple[str, ...] = (
             "liquidations", "funding", "open_interest",
-            "ls_ratio", "sentiment", "social",
+            "ls_ratio", "sentiment", "social", "iceberg", "inflow",
         ),
         initial_weights: Optional[Dict[str, float]] = None,
         eval_window: int = 20,           # tune after every N contrarian trades
@@ -72,6 +72,7 @@ class CrowdWeightOptimizer:
             self._weights = {
                 "liquidations": 0.45, "funding": 0.40, "open_interest": 0.30,
                 "ls_ratio": 0.35, "sentiment": 0.25, "social": 0.20,
+                "iceberg": 0.25, "inflow": 0.30,
             }
         # Rolling record of (components_at_trade, pnl_bps) for attribution
         self._attribution: Deque[Tuple[Dict[str, float], float]] = deque(maxlen=200)

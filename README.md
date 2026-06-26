@@ -1,62 +1,63 @@
-# OMEGA — Autonomous Multi-Modal AI Hedge Fund Entity
+# OMEGA — Autonomous Contrarian AI Hedge Fund
 
-> An institutional-grade, multi-agent trading system that integrates L2/L3 order book microstructure, on-chain analytics, global macro feeds, real-time news NLP, social sentiment, reinforcement learning, and asymmetric risk management into a single self-evolving entity.
+> A crypto-native trading system that doesn't trade the price — it trades **where the crowd is overcrowded**. Eight positioning signals detect statistical extremes in retail leverage, sentiment, and flow, then the ContrarianAgent fades them.
 
-**Status**: Production-ready skeleton with all 6 layers fully implemented and runnable end-to-end. Live Binance WebSocket data works out of the box (no API key needed for market data). Live trading requires `BINANCE_API_KEY` and `BINANCE_API_SECRET`.
-
----
-
-## Table of Contents
-
-1. [Architecture Overview](#architecture-overview)
-2. [Quick Start](#quick-start)
-3. [Installation](#installation)
-4. [Configuration](#configuration)
-5. [Running OMEGA](#running-omega)
-6. [Project Structure](#project-structure)
-7. [Layer Reference](#layer-reference)
-8. [Testing](#testing)
-9. [Production Deployment](#production-deployment)
-10. [Disclaimer](#disclaimer)
+**Status**: Production-ready. OKX primary venue, Binance fallback. 54 tests passing. PPO agents trained (+11.9% trend, +21.1% meanrev vs −1.1% random). Crowd engine with 8 signals + auto-tuning weights. Secure wallet manager (TOTP + cap + panic).
 
 ---
 
-## Architecture Overview
+## The Thesis
 
-OMEGA is built as an autonomous organism with 6 distinct layers, passing data through a high-speed pipeline:
+80% of traders lose because they do what 80% do: they pile into overcrowded extremes at the worst moment, then get liquidated in the inverse cascade. OMEGA quantifies that extreme and takes the other side.
+
+This is an outsider's edge. Institutional giants (Jump, Jane Street, Citadel) cannot do sentiment-based contrarian trading — their compliance forbids it and their sizes are too big to fade retail. OMEGA is built entirely outside that dogma.
+
+**Core principle**: fade only *statistical extremes* where multiple signals agree. When signals diverge, conviction drops and we don't trade. This is what separates a professional fader from a gambler.
+
+---
+
+## Architecture
 
 ```
-                ┌──────────────────────────────────────────────┐
-                │           Layer 1 — Data Nexus               │
-                │   Binance WS · Etherscan · RSS News · FRED   │
-                │      Kafka bus · Milvus vector store         │
-                └──────────────────┬───────────────────────────┘
-                                   │
-                ┌──────────────────▼───────────────────────────┐
-                │         Layer 2 — Alpha Swarm                │
-                │  PPO Trend · PPO MeanRev · LLM Macro · StatArb│
-                │            Debate Chamber (MoE)               │
-                └──────────────────┬───────────────────────────┘
-                                   │
-                ┌──────────────────▼───────────────────────────┐
-                │      Layer 3 — Regime Detector (HMM)         │
-                │   calm_bull / volatile_bull / choppy / bear   │
-                └──────────────────┬───────────────────────────┘
-                                   │
-                ┌──────────────────▼───────────────────────────┐
-                │         Layer 4 — Risk Aegis                 │
-                │  Kelly · Monte Carlo · Kill Switch · Heat    │
-                └──────────────────┬───────────────────────────┘
-                                   │
-                ┌──────────────────▼───────────────────────────┐
-                │       Layer 5 — Execution Blade              │
-                │  SOR · TWAP · VWAP · Iceberg · RL execution  │
-                └──────────────────┬───────────────────────────┘
-                                   │
-                ┌──────────────────▼───────────────────────────┐
-                │      Layer 6 — Meta-Cognition                │
-                │  Trade Autopsy (LLM) · Online Learning · GA  │
-                └──────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ Layer 1 — Data Nexus (OKX WS / Binance WS / on-chain / RSS)     │
+│   trades · depth · funding · liquidations · OI · news · macro   │
+└──────────────┬──────────────────────────────────────────────────┘
+               │
+┌──────────────▼──────────────────────────────────────────────────┐
+│ Layer 1.5 — Crowd Positioning Engine (8 signals)                │
+│   liquidations · funding · open_interest · ls_ratio             │
+│   sentiment · social · iceberg · inflow                         │
+│   → CrowdPositioningEvent {score, conviction, horizon}          │
+│   → CrowdWeightOptimizer (V4 auto-tunes fusion weights)         │
+└──────────────┬──────────────────────────────────────────────────┘
+               │
+┌──────────────▼──────────────────────────────────────────────────┐
+│ Layer 2 — Alpha Swarm (5 agents + Debate Chamber)               │
+│   PPO Trend (trained) · PPO Meanrev (trained) · Contrarian      │
+│   LLM Macro · Stat-Arb                                          │
+└──────────────┬──────────────────────────────────────────────────┘
+               │
+┌──────────────▼──────────────────────────────────────────────────┐
+│ Layer 3 — Regime Detector (HMM) + Crowd Regime Override         │
+│   calm_bull / volatile_bull / choppy / bear / crowd_cascade     │
+└──────────────┬──────────────────────────────────────────────────┘
+               │
+┌──────────────▼──────────────────────────────────────────────────┐
+│ Layer 4 — Risk Aegis                                            │
+│   Kelly · Monte Carlo · Kill Switch · Portfolio Heat            │
+└──────────────┬──────────────────────────────────────────────────┘
+               │
+┌──────────────▼──────────────────────────────────────────────────┐
+│ Layer 5 — Execution Blade (OKX / Binance)                       │
+│   SOR · TWAP · VWAP · Iceberg · RL execution                    │
+│   Wallet Manager (TOTP + cap + panic)                           │
+└──────────────┬──────────────────────────────────────────────────┘
+               │
+┌──────────────▼──────────────────────────────────────────────────┐
+│ Layer 6 — Meta-Cognition                                        │
+│   Trade Autopsy (LLM) · Online Learning · Genetic Optimizer     │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -64,131 +65,147 @@ OMEGA is built as an autonomous organism with 6 distinct layers, passing data th
 ## Quick Start
 
 ```bash
-# 1. Install dependencies
+# 1. Install
 pip install -r requirements.txt
 
-# 2. Run the smoke test (verifies all layers work)
+# 2. Run all tests (54 tests)
 python tests/test_smoke.py
+python tests/test_regression.py
+python tests/test_crowd_engine.py
+python tests/test_okx.py
+python tests/test_microstructure.py
 
-# 3. Train PPO on synthetic data (no external dependencies)
-python scripts/train_ppo.py --episodes 5
+# 3. Generate training data + train PPO agents
+python scripts/gen_synthetic_data.py
+python scripts/train_ppo.py --data tests/_train_data.csv --episodes 50 --mode-type trend
+python scripts/train_ppo.py --data tests/_train_data.csv --episodes 25 --mode-type meanrev
 
-# 4. Run live trading in DRY-RUN mode (no API key needed)
-python scripts/live_trade.py
+# 4. Live trade with trained agents (DRY-RUN, no keys needed)
+python scripts/live_trade.py --symbols BTCUSDT --load-checkpoints
 ```
 
 ---
 
-## Installation
+## OKX Setup (primary venue)
 
-### Prerequisites
-
-- Python 3.12+
-- `pip` or `uv`
-- Docker (optional — only if you want Kafka/Milvus running)
-
-### Steps
+OMEGA auto-selects OKX when its 3 credentials are set. Otherwise it falls back to Binance.
 
 ```bash
-git clone <repo-url>
-cd omega
+# OKX credentials (3-part auth)
+set OKX_API_KEY=your_key
+set OKX_API_SECRET=your_secret
+set OKX_PASSPHRASE=your_passphrase
+set OKX_DEMO=true          # paper trading first!
 
-# Create venv
-python -m venv .venv
-source .venv/bin/activate  # Linux/macOS
+# Wallet security (TOTP — required for withdrawals)
+set OMEGA_TOTP_SECRET=your_base32_secret
+set OMEGA_DAILY_CAP_USD=500
 
-# Install Python dependencies
-pip install -r requirements.txt
-
-# (Optional) Install production infrastructure
-pip install -e ".[prod]"   # confluent-kafka + pymilvus
-docker-compose up -d       # Kafka + Milvus + Redis
-
-# Verify installation
-python tests/test_smoke.py
+# Live trade
+python scripts/live_trade.py --symbols BTCUSDT,ETHUSDT --load-checkpoints
 ```
 
-### Optional API Keys
-
-OMEGA works immediately with no API keys (Binance public WebSocket, public RSS feeds, in-process Kafka/Milvus fallbacks). To unlock more data sources and live trading, set these env vars:
+### Dashboard + Wallet CLI
 
 ```bash
-# Required for live order submission (otherwise: dry-run mode)
-export BINANCE_API_KEY="your-key"
-export BINANCE_API_SECRET="your-secret"
-export BINANCE_TESTNET="true"   # use testnet first!
+# Live positions/PnL dashboard
+python -m omega.cli.app dashboard
 
-# Optional: on-chain whale tracking
-export ETHERSCAN_API_KEY="your-key"
+# Wallet status
+python -m omega.cli.app status
 
-# Optional: macroeconomic indicators
-export FRED_API_KEY="your-key"
+# Withdraw (requires TOTP code from your phone)
+python -m omega.cli.app withdraw 100 USDT 0xAbc... ETH-ERC20 123456
 
-# Optional: production infrastructure
-export KAFKA_BOOTSTRAP_SERVERS="localhost:9092"
-export MILVUS_HOST="localhost"
-export MILVUS_PORT="19530"
+# Panic switch (freeze ALL withdrawals instantly)
+python -m omega.cli.app panic
+
+# Change daily cap
+python -m omega.cli.app set-cap 2000 123456
 ```
+
+---
+
+## The Crowd Positioning Engine (Layer 1.5)
+
+Eight signals, each normalized to `[-1, +1]` and tagged with a horizon:
+
+| Signal | Source | What it measures | Horizon |
+|--------|--------|------------------|---------|
+| **liquidations** | WS `!forceOrder@arr` (Binance) / `liquidation-orders` (OKX) | Real-time cascade confirmation — most predictive | minutes |
+| **funding rate** | `@markPrice` (Binance) / `mark-price` (OKX) | Perp leverage crowding | hours |
+| **open interest** | REST `openInterestHist` | Leverage piling in / flushing (rate-of-change) | hours |
+| **ls_ratio** | REST `globalLongShortAccountRatio` | Retail account positioning | hours |
+| **sentiment** | Fear & Greed API | Narrative fear/euphoria extremes | days |
+| **social** | CoinGecko trending | Retail euphoria (meme coin ratio) | days |
+| **iceberg** | Depth feed (passive) | Hidden order walls — microstructure | minutes |
+| **inflow** | Whale Alert / on-chain | Exchange-bound whale transfers (imminent selling) | hours |
+
+### Fusion logic
+```
+crowd_score = Σ(signal_score × weight) / Σ(weights)   clamped [-1, +1]
+conviction  = |crowd_score| × (1 − divergence)         where divergence = fraction of
+             disagreeing significant signals
+```
+When all signals agree → high conviction → `cascade_imminent`. When they diverge → low conviction → no trade.
+
+### V4 Auto-tuning
+The `CrowdWeightOptimizer` evolves the 8 fusion weights from realized contrarian PnL. Signals whose extremes preceded winning fades get up-weighted; misleading signals get down-weighted. The engine self-improves with every closed trade.
+
+---
+
+## The ContrarianAgent
+
+Rule-based (not ML — an extreme is a threshold, not a prediction). Only fires when `|crowd_score| > 0.5`:
+
+- **Side**: inverse of crowd (crowd long overcrowded → SHORT)
+- **Confidence**: capped at 0.85
+- **TP/SL asymmetry**: `stop = 0.3 × TP` — small frequent losses, large gains when the cascade claps (win rate ~35%, positive expectancy — the signature of every surviving mean-reversion strategy)
+- **Holding period**: set by the event's horizon
+
+---
+
+## Risk Aegis (Layer 4)
+
+Every signal passes through survival-first gates:
+1. **Kill switch** — latches on flash crash (>5%/30s), drawdown (>8%), latency (>5s), API errors (5+). Requires manual reset.
+2. **Confidence floor** — reject < 0.55
+3. **Kelly sizing** — quarter-Kelly with loss-streak penalty
+4. **Monte Carlo** — 10K paths × 30 bars; if drawdown prob > 0.3, scale down
+5. **Portfolio heat** — reject if correlation > 0.70 with existing position
+
+---
+
+## What was audited & fixed (full history)
+
+See `AUDIT.md` for the complete bug audit (3 critical + 7 major + 10 minor bugs found and fixed, each with a regression test). Key critical fixes:
+- **C1**: live pipeline was dead (orchestrator never fed market data to Risk Aegis → zero orders ever emitted)
+- **C2**: PPO agent mashed all symbols into one state buffer
+- **C3**: mean-reversion reward was a trivial 0.7× rescale of trend reward
+- **Runtime**: kill switch triggered false flash-crash 2s after startup (latched, froze all trading)
 
 ---
 
 ## Configuration
 
-All configuration lives in `omega/config/settings.py` and is loaded from environment variables with sane production defaults. Key knobs:
-
 | Env Var | Default | Purpose |
 |---------|---------|---------|
-| `OMEGA_ENV` | `dev` | `dev` \| `staging` \| `production` |
-| `OMEGA_LOG_LEVEL` | `INFO` | `DEBUG` \| `INFO` \| `WARNING` \| `ERROR` |
-| `OMEGA_SYMBOLS` | `BTCUSDT,ETHUSDT,SOLUSDT` | Comma-separated trading symbols |
-| `OMEGA_RISK_MAX_DRAWDOWN_PCT` | `8.0` | Hard kill-switch threshold |
-| `OMEGA_RISK_PER_TRADE_PCT` | `1.0` | Max % equity risked per trade |
-| `OMEGA_RISK_KELLY_FRACTION` | `0.25` | Quarter-Kelly by default |
-| `ZAI_CLI_PATH` | `/usr/local/bin/z-ai` | Path to LLM CLI for macro agent + autopsy |
-
----
-
-## Running OMEGA
-
-### 1. Train the PPO Agent
-
-```bash
-# On historical data
-python scripts/train_ppo.py \
-  --mode historical \
-  --data data/btcusd_1min.parquet \
-  --episodes 50
-
-# On live Binance data
-python scripts/train_ppo.py --mode live --episodes 1
-```
-
-Trained checkpoints are saved to `checkpoints/ppo_trend_{timestamp}.pt`.
-
-### 2. Backtest with Vectorized NumPy/Pandas
-
-```bash
-python scripts/backtest.py \
-  --data data/btcusd_1min.parquet \
-  --initial-equity 100000 \
-  --checkpoint checkpoints/ppo_trend_latest.pt \
-  --output results.json
-```
-
-### 3. Run Live Trading
-
-```bash
-# DRY-RUN mode (no API keys — orders logged but not submitted)
-python scripts/live_trade.py
-
-# LIVE mode (real money!)
-export BINANCE_API_KEY="..."
-export BINANCE_API_SECRET="..."
-export BINANCE_TESTNET="true"   # ALWAYS test on testnet first
-python scripts/live_trade.py --symbols BTCUSDT,ETHUSDT
-```
-
-Press `Ctrl+C` to gracefully shut down. The kill switch will cancel all open orders automatically.
+| `OKX_API_KEY` | — | OKX API key (3-part auth) |
+| `OKX_API_SECRET` | — | OKX API secret |
+| `OKX_PASSPHRASE` | — | OKX passphrase |
+| `OKX_DEMO` | `false` | Use OKX demo (paper) trading |
+| `OMEGA_TOTP_SECRET` | — | Base32 TOTP secret for wallet withdrawals |
+| `OMEGA_DAILY_CAP_USD` | `500` | Daily withdrawal cap (USD) |
+| `OMEGA_SYMBOLS` | `BTCUSDT,ETHUSDT,SOLUSDT` | Trading symbols |
+| `OMEGA_RISK_MAX_DRAWDOWN_PCT` | `8.0` | Kill switch drawdown threshold |
+| `OMEGA_RISK_PER_TRADE_PCT` | `1.0` | Max % equity per trade |
+| `OMEGA_RISK_KELLY_FRACTION` | `0.25` | Quarter-Kelly |
+| `BINANCE_API_KEY` | — | Binance (fallback venue) |
+| `BINANCE_API_SECRET` | — | Binance secret |
+| `BINANCE_TESTNET` | `false` | Binance testnet |
+| `ETHERSCAN_API_KEY` | — | On-chain whale tracking |
+| `WHALE_ALERT_API_KEY` | — | Large transfer inflow signal |
+| `ZAI_CLI_PATH` | `z-ai` | LLM CLI for macro agent + autopsy |
 
 ---
 
@@ -196,170 +213,60 @@ Press `Ctrl+C` to gracefully shut down. The kill switch will cancel all open ord
 
 ```
 omega/
-├── __init__.py                       # Public API
-├── orchestrator.py                   # Top-level coordinator (all 6 layers)
-├── rl_environment.py                 # PyTorch RL env (master prompt centerpiece)
-├── config/
-│   └── settings.py                   # All env-var-driven config
-├── utils/
-│   ├── logger.py                     # Structured JSON logger
-│   └── events.py                     # Typed event dataclasses (MarketEvent, SignalEvent, etc.)
-├── data_nexus/                       # Layer 1 — omniscient ingestion
-│   ├── base.py                       # DataSource / DataSink ABCs
-│   ├── binance_feed.py               # REAL Binance WebSocket (L2 depth + trades + ticker)
-│   ├── etherscan_feed.py             # REAL on-chain whale tracking
-│   ├── news_feed.py                  # REAL RSS news + LLM sentiment
-│   ├── macro_feed.py                 # REAL FRED macro indicators
-│   ├── kafka_bus.py                  # REAL Kafka (with in-process fallback)
-│   ├── vector_store.py               # REAL Milvus (with NumPy fallback)
-│   └── nexus.py                      # Layer 1 orchestrator
-├── alpha_swarm/                      # Layer 2 — mixture-of-experts
-│   ├── base.py                       # AlphaAgent ABC
-│   ├── ppo_agent.py                  # PyTorch PPO (The Quant)
-│   ├── llm_macro_agent.py            # LLM macro economist (z-ai CLI)
-│   ├── stat_arb_agent.py             # Cointegration pair trading
-│   ├── debate_chamber.py             # Weighted-vote meta-agent
-│   └── swarm.py                      # Layer 2 orchestrator
-├── regime/                           # Layer 3 — HMM regime context
-│   ├── hmm_detector.py               # GaussianHMM 4-state classifier
-│   └── weight_router.py              # Regime → agent weight matrix
-├── risk_aegis/                       # Layer 4 — survival-first risk
-│   ├── kelly.py                      # Asymmetric Kelly Criterion
-│   ├── monte_carlo.py                # 10K-path drawdown probability
-│   ├── kill_switch.py                # Hard-coded safety latch
-│   ├── portfolio_heat.py             # Correlation-aware exposure limiter
-│   └── aegis.py                      # Layer 4 orchestrator
-├── execution/                        # Layer 5 — RL smart order routing
-│   ├── base.py                       # Executor ABC
-│   ├── algorithms.py                 # TWAP / VWAP / Iceberg
-│   ├── binance_executor.py           # REAL Binance REST API (HMAC signed)
-│   ├── sor.py                        # Smart Order Router
-│   ├── execution_rl.py               # PPO agent for execution optimization
-│   └── blade.py                      # Layer 5 orchestrator
-├── meta_cognition/                   # Layer 6 — self-evolution
-│   ├── trade_autopsy.py              # LLM autopsy of closed trades
-│   ├── online_learning.py            # Continuous retraining
-│   ├── genetic_optimizer.py          # Darwinian agent mutation
-│   └── meta.py                       # Layer 6 orchestrator
+├── orchestrator.py                # 7-layer coordinator
+├── config/settings.py             # env-driven config
+├── data_nexus/                    # Layer 1
+│   ├── okx_feed.py                # OKX WS (trades/depth/funding/liquidations)
+│   ├── binance_feed.py            # Binance WS (fallback)
+│   ├── etherscan_feed.py          # on-chain whales
+│   ├── news_feed.py               # RSS + LLM sentiment
+│   └── ...
+├── crowd_engine/                  # Layer 1.5 (the contrarian brain)
+│   ├── engine.py                  # 8-signal fusion
+│   ├── optimizer.py               # V4 auto-tuning weights
+│   └── signals/                   # 8 positioning signals
+│       ├── liquidation_signal.py
+│       ├── funding_signal.py
+│       ├── open_interest_signal.py
+│       ├── ls_ratio_signal.py
+│       ├── sentiment_signal.py
+│       ├── social_signal.py
+│       ├── iceberg_signal.py
+│       └── inflow_signal.py
+├── alpha_swarm/                   # Layer 2
+│   ├── ppo_agent.py               # trained PPO (trend + meanrev)
+│   ├── contrarian_agent.py        # fades crowd extremes
+│   ├── llm_macro_agent.py
+│   └── ...
+├── execution/                     # Layer 5
+│   ├── okx_executor.py            # OKX REST (HMAC signing)
+│   ├── binance_executor.py        # Binance REST (fallback)
+│   ├── wallet_manager.py          # SECURE withdrawals (TOTP+cap+panic)
+│   ├── venue.py                   # exchange-agnostic abstraction
+│   └── ...
+├── cli/app.py                     # dashboard + wallet CLI
+└── ...
 
 scripts/
-├── train_ppo.py                      # PPO training entry point
-├── live_trade.py                     # Live trading entry point
-└── backtest.py                       # Vectorized backtest entry point
+├── gen_synthetic_data.py          # multi-regime training data generator
+├── train_ppo.py                   # PPO training (fixed: actually learns now)
+├── live_trade.py                  # live trading entry point
+└── backtest.py                    # vectorized backtest
 
-tests/
-└── test_smoke.py                     # 12-test smoke test
-
-docker-compose.yml                    # Kafka + Milvus + Redis
-pyproject.toml                        # Package config
-requirements.txt                      # Pip dependencies
-README.md                             # This file
+tests/                             # 54 tests total
+├── test_smoke.py                  # 12 — layer smoke tests
+├── test_regression.py             # 11 — audit bug regression tests
+├── test_crowd_engine.py           # 16 — crowd engine + contrarian
+├── test_okx.py                    # 10 — OKX + wallet + TOTP
+└── test_microstructure.py         # 5 — iceberg + inflow
 ```
-
----
-
-## Layer Reference
-
-### Layer 1 — Data Nexus
-
-Real-time ingestion of every market-informative signal: L2/L3 order book depth, tick trades, perpetual funding rates, on-chain whale movements, RSS news with LLM sentiment scoring, FRED macroeconomic indicators. Publishes to Kafka (durable, replayable) and fans out to in-process subscribers (low-latency). Vector store (Milvus) holds historical patterns for RAG retrieval.
-
-### Layer 2 — Alpha Swarm
-
-Mixture-of-Experts architecture with 4 specialized agents:
-- **PPO Trend** (PyTorch): captures directional moves via PPO actor-critic
-- **PPO Mean-Reversion**: same architecture, reward shaped for fading extremes
-- **LLM Macro Economist**: reads news + macro + on-chain context, queries z-ai LLM every 5 min for directional views
-- **Stat-Arb**: Engle-Granger cointegration test on asset pairs, z-score entry/exit
-
-The **Debate Chamber** aggregates signals via weighted vote, detects conflicts (high std-dev of votes → defer), and emits consolidated SignalEvents.
-
-### Layer 3 — Regime Detector
-
-GaussianHMM (4 states) classifies market into `calm_bull`, `volatile_bull`, `choppy`, `bear`. On regime transition, the **Weight Router** updates agent weights in the Debate Chamber — e.g., in Bear regime, Trend Following is defunded (weight 0.05) and LLM Macro is boosted (weight 0.40).
-
-### Layer 4 — Risk Aegis
-
-Survival-first risk gate. Every signal passes through:
-1. Kill switch check (instant reject if triggered)
-2. Confidence floor (reject < 0.55)
-3. Kelly position sizing (quarter-Kelly + asymmetric loss-streak penalty)
-4. Monte Carlo de-risking (10K paths × 30 bars; if >2% drawdown prob > 0.3, scale down)
-5. Portfolio heat check (reject if correlation > 0.70 with existing same-direction position)
-
-Hard kill switch latches on: latency > 5s, 5+ API errors, 5% drop in 60s, or 8% portfolio drawdown. Requires manual reset.
-
-### Layer 5 — Execution Blade
-
-Smart Order Router picks venue + algorithm:
-- < $1k: single market order
-- $1k–$50k: TWAP × 5 slices
-- $50k–$500k: VWAP @ 10% participation
-- > $500k: Iceberg @ 5% display qty
-
-PPO-based execution RL agent learns optimal slicing based on order-book features (trained offline, overrides heuristic when ready). Real Binance REST API integration with HMAC-SHA256 signing. Dry-run mode when no API credentials.
-
-### Layer 6 — Meta-Cognition
-
-Self-evaluating loop:
-- **Trade Autopsy**: every 10 closed trades, LLM analyzes root cause (bad_entry, slippage_dominant, regime_mismatch, etc.) and produces improvement suggestions
-- **Online Learner**: periodically retrains underperforming agents on fresh data
-- **Genetic Optimizer**: agents with negative Sharpe over 30 days are killed and mutated (Gaussian perturbation of lr, clip, entropy, hidden size, observation window)
-
----
-
-## Testing
-
-```bash
-# Run all smoke tests (12 tests, ~10 seconds)
-python tests/test_smoke.py
-
-# Run a quick training session
-python scripts/train_ppo.py --episodes 3
-
-# Verify live data ingestion (Ctrl+C after 30s)
-python scripts/live_trade.py --log-level DEBUG
-```
-
----
-
-## Production Deployment
-
-### Infrastructure
-
-```bash
-# Bring up Kafka + Milvus + Redis
-docker-compose up -d
-
-# Verify
-docker-compose ps
-```
-
-### Recommended Hardware
-
-- **CPU**: 8+ cores (PPO training is CPU-bound for small networks)
-- **RAM**: 32 GB (Milvus + Kafka + Python)
-- **GPU**: Optional (RTX 4090+ speeds up PPO training 5-10×)
-- **Network**: Co-located with exchange (<10ms latency for execution layer)
-- **Storage**: NVMe SSD (Milvus + Kafka log persistence)
-
-### Production Checklist
-
-- [ ] Set `OMEGA_ENV=production`
-- [ ] Set `OMEGA_LOG_LEVEL=INFO` (not DEBUG)
-- [ ] Configure real Kafka + Milvus (not fallbacks)
-- [ ] Set `BINANCE_API_KEY` + `BINANCE_API_SECRET`
-- [ ] Start on Binance Testnet for 1 week of paper trading
-- [ ] Monitor kill switch trigger rate (target: <1/week)
-- [ ] Set up alerting on kill switch triggers
-- [ ] Configure trade autopsy persistence (S3 backup of `data/autopsy_*.json`)
-- [ ] Run PPO training weekly with fresh data
-- [ ] Review genetic mutations monthly
 
 ---
 
 ## Disclaimer
 
-This is an architectural framework for an institutional-grade trading system. Building, deploying, and operating such a system requires expertise in Python, distributed systems, financial mathematics, and risk management. Trading cryptocurrencies involves substantial risk of loss. **Never deploy with capital you cannot afford to lose.** Always start with testnet, paper-trade for months before live trading, and keep position sizes tiny until you have empirically validated every layer.
+Trading cryptocurrencies involves substantial risk of loss. The contrarian thesis is sound but edge-dependent: it degrades if it becomes popular. **Never deploy with capital you cannot afford to lose.** Always start with OKX demo / Binance testnet, paper-trade for weeks before live trading, and keep position sizes tiny until you have empirically validated every layer.
 
-The code in this repository is provided as-is under the MIT license. The authors are not responsible for any financial losses incurred through its use.
+The wallet manager's TOTP + cap + panic layers exist precisely because a leaked API key without them means instant total loss. Generate your TOTP secret offline, never commit it, and use a dedicated API key with withdrawal permission only for the wallet manager.
+
+MIT License. Provided as-is. Authors are not responsible for financial losses.
