@@ -109,6 +109,8 @@ td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.03)}
     <button onclick="show('risk')">Risk</button>
     <button onclick="show('wallet')">Wallet</button>
     <button onclick="show('profiles')">Profiles</button>
+    <button onclick="show('markets')">Markets</button>
+    <button onclick="show('web3')">Web3</button>
     <button onclick="show('settings')">Settings</button>
   </nav>
   <div class="status-pill glass">
@@ -221,6 +223,39 @@ td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.03)}
         <div style="flex:1"><label>Passphrase</label><input id="p-pass" type="password"></div>
         <button class="btn primary" onclick="addProfile()">Add</button>
       </div>
+    </div>
+  </div>
+
+  <!-- MARKETS (cross-venue price aggregator) -->
+  <div class="view" id="view-markets">
+    <div class="card glass">
+      <h3>Cross-Venue Prices (10 exchanges live)</h3>
+      <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:14px">
+        <div style="flex:1"><label>Symbol</label><input id="mkt-sym" value="BTCUSDT"></div>
+        <button class="btn primary" onclick="loadMarkets()">Refresh</button>
+      </div>
+      <table><thead><tr><th>Venue</th><th>Price</th><th>Bid</th><th>Ask</th><th>vs Median</th></tr></thead>
+      <tbody id="marketTable"><tr><td colspan="5" style="color:var(--txt-dim)">Click Refresh</td></tr></tbody></table>
+      <div id="marketSummary" style="margin-top:12px"></div>
+    </div>
+    <div class="card glass" style="margin-top:20px">
+      <h3>Supported Exchanges</h3>
+      <div id="exchangeList" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+  </div>
+
+  <!-- WEB3 (MetaMask wallet) -->
+  <div class="view" id="view-web3">
+    <div class="card glass">
+      <h3>Web3 Wallet (MetaMask-compatible)</h3>
+      <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:14px">
+        <div style="flex:2"><label>Wallet Address (0x...)</label><input id="w3-addr" placeholder="0xAbc..."></div>
+        <div style="flex:1"><label>Chain</label>
+          <select id="w3-chain"><option>ethereum</option><option>polygon</option><option>bsc</option><option>arbitrum</option><option>base</option></select>
+        </div>
+        <button class="btn primary" onclick="loadWeb3()">Read Balance</button>
+      </div>
+      <div id="web3Balances"></div>
     </div>
   </div>
 
@@ -340,9 +375,49 @@ async function doWithdraw(){
   const r=await api('POST','/api/wallet/withdraw',{ccy:$('w-ccy').value,amount:parseFloat($('w-amt').value),address:$('w-addr').value,chain:$('w-chain').value,totp:$('w-totp').value});
   if(r.ok)toast('Withdrawal submitted ✓');else toast('Blocked: '+(r.reason||r.error||'unknown'),'err');
 }
+// Markets (cross-venue)
+async function loadMarkets(){
+  const sym=$('mkt-sym').value||'BTCUSDT';
+  toast('Fetching prices across 10 exchanges...');
+  const r=await api('GET','/api/markets?symbols='+sym);
+  const s=r[sym];if(!s)return;
+  const tb=$('marketTable');tb.innerHTML='';
+  const venues=Object.entries(s.venues||{}).sort((a,b)=>(a[1].price||0)-(b[1].price||0));
+  venues.forEach(([v,info])=>{
+    const px=info.price||0;const med=s.median||0;
+    const diff=med>0?((px-med)/med*10000).toFixed(1):'—';
+    const cls=px>0?'':'opacity:0.4';
+    tb.innerHTML+=`<tr class="${cls}"><td>${v}</td><td>$${px.toFixed(2)}</td><td>${info.bid? '$'+info.bid.toFixed(2):'—'}</td><td>${info.ask?'$'+info.ask.toFixed(2):'—'}</td><td>${diff>0?'+':''}${diff} bps</td></tr>`;
+  });
+  $('marketSummary').innerHTML=`<div class="metric-sub">Median: <b>$${(s.median||0).toFixed(2)}</b> · Best buy: <b>${s.best_buy_venue}</b> @$${(s.best_buy_price||0).toFixed(2)} · Best sell: <b>${s.best_sell_venue}</b> @$${(s.best_sell_price||0).toFixed(2)} · Spread: <b>${(s.spread_bps||0).toFixed(1)} bps</b></div>`;
+  toast('Prices loaded');
+}
+async function loadExchanges(){
+  const r=await api('GET','/api/exchanges');
+  const el=$('exchangeList');el.innerHTML='';
+  r.forEach(ex=>{
+    const ca=ex.canada?'🇨🇦':'🌐';
+    const api=ex.has_api?'':' (no bot API)';
+    el.innerHTML+=`<div class="chip">${ca} ${ex.display}${api}</div>`;
+  });
+}
+// Web3
+async function loadWeb3(){
+  const addr=$('w3-addr').value;const chain=$('w3-chain').value;
+  if(!addr){toast('Enter a wallet address','err');return}
+  toast('Reading on-chain balances...');
+  const r=await api('GET','/api/web3/balance?address='+addr+'&chain='+chain);
+  const el=$('web3Balances');
+  if(r.error){el.innerHTML=`<div style="color:var(--red)">${r.error}</div>`;return}
+  if(!r.balances||!r.balances.length){el.innerHTML='<div class="metric-sub">No balances found (or RPC unavailable)</div>';return}
+  let h='<table><thead><tr><th>Token</th><th>Balance</th></tr></thead><tbody>';
+  r.balances.forEach(b=>{h+=`<tr><td>${b.symbol}</td><td>${b.balance.toLocaleString(undefined,{maximumFractionDigits:6})}</td></tr>`});
+  h+='</tbody></table>';el.innerHTML=h;
+  toast('Balances loaded');
+}
 // Init
 connectWS();
-loadProfiles();loadKeys();
+loadProfiles();loadKeys();loadExchanges();
 setInterval(()=>{api('GET','/api/positions').then(r=>{if(Array.isArray(r))renderPositions(r)})},5000);
 setInterval(()=>{api('GET','/api/status').then(s=>{if(s.venue)$('m-venue').textContent='venue: '+s.venue+(s.okx_demo?' (demo)':'')})},5000);
 function renderPositions(pos){

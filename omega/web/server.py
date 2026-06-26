@@ -95,6 +95,10 @@ class OmegaWebServer:
         self.app.router.add_delete("/api/keys/{key}", self._api_keys_delete)
         self.app.router.add_post("/api/trading/start", self._api_trading_start)
         self.app.router.add_post("/api/trading/stop", self._api_trading_stop)
+        # Multi-venue + Web3
+        self.app.router.add_get("/api/markets", self._api_markets)
+        self.app.router.add_get("/api/exchanges", self._api_exchanges)
+        self.app.router.add_get("/api/web3/balance", self._api_web3_balance)
         self.app.router.add_get("/ws/live", self._ws_live)
 
     # ------------------------------------------------------------------
@@ -287,6 +291,56 @@ class OmegaWebServer:
             return web.json_response({"ok": True, "running": False})
         except Exception as exc:
             return web.json_response({"ok": False, "error": str(exc)}, status=500)
+
+    # ------------------------------------------------------------------
+    # Multi-venue + Web3
+    # ------------------------------------------------------------------
+
+    async def _api_exchanges(self, request: web.Request) -> web.Response:
+        from omega.config.exchanges import EXCHANGES
+        out = []
+        for name, spec in EXCHANGES.items():
+            out.append({
+                "name": name, "display": spec.name,
+                "canada": spec.canada_available,
+                "notes": spec.canada_notes,
+                "has_api": bool(spec.rest_url),
+                "spot": spec.has_spot, "perp": spec.has_perp,
+                "funding": spec.has_funding, "withdrawals": spec.has_withdrawals,
+            })
+        return web.json_response(out)
+
+    async def _api_markets(self, request: web.Request) -> web.Response:
+        """Cross-venue price aggregator. Returns BTC prices across all exchanges."""
+        from omega.data_nexus.multi_venue import MultiVenueAggregator
+        symbols = request.query.get("symbols", "BTCUSDT,ETHUSDT").split(",")
+        agg = MultiVenueAggregator()
+        for s in symbols:
+            agg.track(s.strip())
+        await agg.start()
+        await asyncio.sleep(8)  # one poll cycle
+        summaries = {s: agg.price_summary(s.strip()) for s in symbols}
+        await agg.stop()
+        return web.json_response(summaries)
+
+    async def _api_web3_balance(self, request: web.Request) -> web.Response:
+        """Read Web3 wallet balances (MetaMask-compatible)."""
+        addr = request.query.get("address", "")
+        chain = request.query.get("chain", "ethereum")
+        if not addr:
+            return web.json_response({"error": "provide ?address=0x..."}, status=400)
+        from omega.web3.wallet import Web3Wallet
+        w = Web3Wallet(address=addr)
+        try:
+            balances = await w.get_all_balances(chain)
+            await w.close()
+            return web.json_response({
+                "address": addr, "chain": chain,
+                "balances": [{"symbol": b.symbol, "balance": b.balance} for b in balances],
+            })
+        except Exception as exc:
+            await w.close()
+            return web.json_response({"error": str(exc)}, status=500)
 
     # ------------------------------------------------------------------
     # WebSocket live

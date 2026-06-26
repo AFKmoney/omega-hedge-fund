@@ -196,6 +196,44 @@ EXCHANGES: Dict[str, ExchangeSpec] = {
         canada_notes="Available in Canada. Spot + futures. Wide altcoin selection.",
         signing_notes="HMAC-SHA512(signature), KEY + SIGN + TIMESTAMP headers",
     ),
+    # Canadian retail exchanges — listed for awareness but they do NOT expose
+    # public trading APIs usable by bots. Use them for manual CAD on/off-ramp
+    # only, then trade on the bot-friendly venues above.
+    "newton": ExchangeSpec(
+        name="Newton (CA)",
+        rest_url="", ws_url="", auth_type="none",
+        key_env="", secret_env="",
+        canada_available=True,
+        canada_notes="Canadian retail exchange. NO public trading API. Use for CAD deposits/withdrawals only (manual). 0.5% spread.",
+    ),
+    "shakepay": ExchangeSpec(
+        name="Shakepay (CA)",
+        rest_url="", ws_url="", auth_type="none",
+        key_env="", secret_env="",
+        canada_available=True,
+        canada_notes="Canadian retail exchange. NO public trading API. CAD on/off-ramp + Shake-to-Earn. Manual only.",
+    ),
+    "ndax": ExchangeSpec(
+        name="NDAX (CA)",
+        rest_url="", ws_url="", auth_type="none",
+        key_env="", secret_env="",
+        canada_available=True,
+        canada_notes="Canadian exchange (Calgary). Closed API for bots. Manual trading only.",
+    ),
+    "bitbuy": ExchangeSpec(
+        name="Bitbuy (CA)",
+        rest_url="", ws_url="", auth_type="none",
+        key_env="", secret_env="",
+        canada_available=True,
+        canada_notes="Canadian exchange (WonderFi). NO public trading API. Manual only.",
+    ),
+    "netcoins": ExchangeSpec(
+        name="Netcoins (CA)",
+        rest_url="", ws_url="", auth_type="none",
+        key_env="", secret_env="",
+        canada_available=True,
+        canada_notes="Canadian exchange. NO public trading API. Manual only.",
+    ),
 }
 
 
