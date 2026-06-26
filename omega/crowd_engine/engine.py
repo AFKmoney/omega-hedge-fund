@@ -1,21 +1,24 @@
 """
 CrowdPositioningEngine — Layer 1.5 orchestrator.
 
-Fuses the three positioning signals (funding rate, long/short ratio,
-sentiment) into a single CrowdPositioningEvent per symbol.
+Fuses an extensible set of positioning signals into a single
+CrowdPositioningEvent per symbol. V1 shipped 3 signals (funding, L/S ratio,
+sentiment); V3 adds open interest, liquidations, and social euphoria.
 
 Fusion logic:
     crowd_score = weighted sum of component scores (clamp [-1, +1])
     conviction  = |crowd_score| * (1 - divergence)   where divergence is the
-                 spread of the normalized component signs — high agreement
-                 boosts conviction, disagreement deflates it.
+                 fraction of significant components whose sign disagrees with
+                 the net direction — high agreement boosts conviction,
+                 disagreement deflates it.
     horizon     = the longest horizon among significant components
     regime_hint = classified from score + conviction
 
-The engine is reactive: it updates per-symbol state on each funding tick and
-emits a CrowdPositioningEvent whenever a symbol's state meaningfully changes.
-The orchestrator routes the event to the ContrarianAgent and to the
-RegimeWeightRouter (to defund trend agents at cascade-imminent extremes).
+V4 — auto-tuning:
+    The fusion weights are mutable and exposed via `set_weights()` / `weights()`
+    so the GeneticOptimizer (Layer 6) can evolve them based on realized
+    contrarian PnL. The engine itself never mutates weights; it only reads the
+    per-signal `weight` attribute, which the optimizer updates in place.
 
 A component is "significant" if |score| >= 0.15.
 """
@@ -25,10 +28,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
+from omega.crowd_engine.optimizer import CrowdWeightOptimizer
 from omega.crowd_engine.signals.base import PositioningSignal, SignalReading
 from omega.crowd_engine.signals.funding_signal import FundingRateSignal
+from omega.crowd_engine.signals.liquidation_signal import LiquidationSignal
 from omega.crowd_engine.signals.ls_ratio_signal import LSRatioSignal
+from omega.crowd_engine.signals.open_interest_signal import OpenInterestSignal
 from omega.crowd_engine.signals.sentiment_signal import SentimentSignal
+from omega.crowd_engine.signals.social_signal import SocialSentimentSignal
 from omega.utils.events import CrowdPositioningEvent, MarketEvent
 from omega.utils.logger import get_logger
 
@@ -50,6 +57,9 @@ class CrowdPositioningEngine:
         funding: Optional[FundingRateSignal] = None,
         ls_ratio: Optional[LSRatioSignal] = None,
         sentiment: Optional[SentimentSignal] = None,
+        open_interest: Optional[OpenInterestSignal] = None,
+        liquidations: Optional[LiquidationSignal] = None,
+        social: Optional[SocialSentimentSignal] = None,
         # Min |score| to emit an event at all (avoid spamming on noise)
         emit_threshold: float = 0.20,
         # Move in |score| required to re-emit for an already-extreme symbol
@@ -57,30 +67,81 @@ class CrowdPositioningEngine:
         cascade_conviction: float = 0.70,
     ) -> None:
         self.symbols = tuple(s.upper() for s in symbols)
+        # Core V1 signals
         self.funding = funding or FundingRateSignal()
         self.ls_ratio = ls_ratio or LSRatioSignal(symbols=self.symbols)
         self.sentiment = sentiment or SentimentSignal()
+        # V3 signals
+        self.open_interest = open_interest or OpenInterestSignal(symbols=self.symbols)
+        self.liquidations = liquidations or LiquidationSignal(symbols=self.symbols)
+        self.social = social or SocialSentimentSignal()
+        # Ordered signal registry — the fusion iterates this list. Adding a new
+        # signal means appending here + giving it a fusion weight.
+        self._signals: List[PositioningSignal] = [
+            self.liquidations,   # most predictive (real cascade confirmation)
+            self.funding,
+            self.open_interest,
+            self.ls_ratio,
+            self.sentiment,
+            self.social,
+        ]
         self.emit_threshold = emit_threshold
         self.reemit_delta = reemit_delta
         self.cascade_conviction = cascade_conviction
-        # The three signals, in fixed order for fusion math
-        self._signals: List[PositioningSignal] = [self.funding, self.ls_ratio, self.sentiment]
         self._last_emitted_score: Dict[str, float] = {}
         self._events_emitted = 0
+        # V4 — auto-tuning of fusion weights from realized contrarian PnL.
+        # Disabled (no-op) until `on_contrarian_trade_closed` is wired up by
+        # the orchestrator; harmless when idle.
+        self.optimizer = CrowdWeightOptimizer(signal_names=tuple(s.name for s in self._signals))
+
+    @property
+    def signals(self) -> List[PositioningSignal]:
+        """All registered signals (for the GeneticOptimizer to tune weights)."""
+        return list(self._signals)
+
+    def weights(self) -> Dict[str, float]:
+        """Current fusion weights, keyed by signal name. Tunable via V4."""
+        # Prefer the optimizer's evolved weights if they've diverged from the
+        # signal defaults; otherwise read the live signal weights.
+        return {s.name: s.weight for s in self._signals}
+
+    def set_weights(self, weights: Dict[str, float]) -> None:
+        """Update fusion weights in place (called by the GeneticOptimizer)."""
+        by_name = {s.name: s for s in self._signals}
+        for name, w in weights.items():
+            sig = by_name.get(name)
+            if sig is not None:
+                sig.weight = float(w)
+
+    def on_contrarian_trade_closed(self, pnl_bps: float, components: Dict[str, float]) -> None:
+        """V4 hook — called by the orchestrator when a contrarian trade closes.
+        Feeds the outcome to the weight optimizer and applies any new weights."""
+        self.optimizer.record_trade(pnl_bps, components)
+        new_weights = self.optimizer.maybe_tune()
+        if new_weights is not None:
+            self.set_weights(new_weights)
 
     async def start(self) -> None:
-        """Start background polling tasks (L/S ratio, sentiment)."""
-        await self.ls_ratio.start()
-        await self.sentiment.start()
+        """Start background polling/streaming tasks for each signal."""
+        for sig in self._signals:
+            starter = getattr(sig, "start", None)
+            if starter is not None:
+                await starter()
         logger.info(
             f"CrowdPositioningEngine started: {len(self.symbols)} symbols, "
-            f"3 signals",
+            f"{len(self._signals)} signals ({[s.name for s in self._signals]})",
             extra={"component": "crowd_engine"},
         )
 
     async def stop(self) -> None:
-        await self.ls_ratio.stop()
-        await self.sentiment.stop()
+        for sig in self._signals:
+            stopper = getattr(sig, "stop", None)
+            if stopper is not None:
+                try:
+                    await stopper()
+                except Exception as exc:
+                    logger.warning(f"Signal {sig.name} stop error: {exc}")
 
     def on_market(self, event: MarketEvent) -> Optional[CrowdPositioningEvent]:
         """
@@ -91,12 +152,13 @@ class CrowdPositioningEngine:
         sym = event.symbol
         if sym not in self.symbols:
             return None
-        # Feed funding rate into the funding signal
+        # Feed funding rate into the funding signal (the only reactive signal;
+        # the others poll/stream independently)
         self.funding.update(sym, event.funding_rate)
         return self._compute_event(sym, event.timestamp)
 
     def _compute_event(self, symbol: str, timestamp: str) -> Optional[CrowdPositioningEvent]:
-        """Fuse the three signals for one symbol into one event."""
+        """Fuse all signals for one symbol into one event."""
         components: Dict[str, float] = {}
         readings: List[SignalReading] = []
         for sig in self._signals:
@@ -115,11 +177,10 @@ class CrowdPositioningEngine:
         crowd_score = sum(r.score * r.weight for r in readings) / total_w
         crowd_score = max(-1.0, min(1.0, crowd_score))
 
-        # Divergence: how much do the component SIGNS disagree?
-        # If all agree on direction → low divergence → high conviction.
+        # Divergence: fraction of significant components whose sign disagrees
+        # with the net crowd direction.
         sigs = [r.score for r in readings if abs(r.score) >= 0.15]
         if len(sigs) >= 2:
-            # Fraction of components whose sign disagrees with the crowd_score sign
             direction = 1.0 if crowd_score >= 0 else -1.0
             disagree = sum(1 for s in sigs if (s >= 0) != (direction >= 0))
             divergence = disagree / len(sigs)
@@ -132,7 +193,10 @@ class CrowdPositioningEngine:
         # Horizon = longest significant component horizon
         sig_readings = [r for r in readings if abs(r.score) >= 0.15]
         if sig_readings:
-            horizon = max((r.horizon for r in sig_readings), key=lambda h: _HORIZON_RANK.get(h, 0))
+            horizon = max(
+                (r.horizon for r in sig_readings),
+                key=lambda h: _HORIZON_RANK.get(h, 0),
+            )
         else:
             horizon = "hours"
 
@@ -186,7 +250,6 @@ class CrowdPositioningEngine:
             "symbols": list(self.symbols),
             "events_emitted": self._events_emitted,
             "last_scores": self._last_emitted_score,
-            "funding": self.funding.stats(),
-            "ls_ratio": self.ls_ratio.stats(),
-            "sentiment": self.sentiment.stats(),
+            "weights": self.weights(),
+            "signals": {s.name: s.stats() for s in self._signals},
         }

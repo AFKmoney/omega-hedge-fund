@@ -70,6 +70,7 @@ class OmegaOrchestrator:
         self._running = False
         self._last_regime: str = "unknown"
         self._last_crowd_regime: str = "neutral"
+        self._last_crowd_components: dict = {}  # symbol -> latest crowd components (V4 attribution)
         self._signal_count = 0
         self._order_count = 0
         self._fill_count = 0
@@ -181,6 +182,9 @@ class OmegaOrchestrator:
     def _on_crowd_positioning(self, event: CrowdPositioningEvent) -> None:
         """React to a CrowdPositioningEvent: reconfigure regime weights if the
         crowd is at a cascade-imminent extreme, then feed the ContrarianAgent."""
+        # Remember the latest components per symbol so that when a contrarian
+        # trade closes we can attribute its PnL to the right signals (V4 tuning).
+        self._last_crowd_components[event.symbol] = dict(event.components)
         crowd_regime = (
             f"crowd_cascade_{'long' if event.crowd_score > 0 else 'short'}"
             if event.regime_hint == "cascade_imminent"
@@ -205,6 +209,10 @@ class OmegaOrchestrator:
         if self._last_regime and self._last_regime != "unknown":
             weights = self.weight_router.weights_for(self._last_regime)
             self.alpha_swarm.set_regime_weights(weights)
+
+    def _lookup_crowd_components(self, symbol: str) -> dict:
+        """Return the latest crowd components for a symbol (for V4 attribution)."""
+        return self._last_crowd_components.get(symbol, {})
 
     async def _process_signals(self, signals, timestamp: str) -> None:
         """Pass signals through Risk Aegis → Execution Blade."""
@@ -234,6 +242,18 @@ class OmegaOrchestrator:
                 closed = self.meta_cognition.on_fill(fill)
                 if closed is not None:
                     self.risk_aegis.on_trade_closed(closed)
+                    # V4: feed contrarian trade outcomes to the crowd engine's
+                    # weight optimizer so fusion weights self-tune over time.
+                    if closed.strategy == "contrarian":
+                        components = closed.autopsy.get("crowd_components", {}) \
+                            if closed.autopsy else {}
+                        # Fall back to the signal metadata carried by the order
+                        if not components:
+                            components = self._lookup_crowd_components(closed.symbol)
+                        if components:
+                            self.crowd_engine.on_contrarian_trade_closed(
+                                closed.realized_pnl_bps, components
+                            )
 
     def stats(self) -> dict:
         return {

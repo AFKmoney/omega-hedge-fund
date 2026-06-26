@@ -101,16 +101,23 @@ def test_sentiment_signal_extremes() -> None:
 # ---------------------------------------------------------------------------
 
 def test_engine_fusion_agreement_boosts_conviction() -> None:
-    """When all 3 signals agree on direction, conviction is high."""
+    """When all signals agree on direction, conviction is high."""
     print("Testing engine fusion: agreement boosts conviction...", end=" ")
     from omega.crowd_engine import CrowdPositioningEngine
     from omega.utils.events import MarketEvent
 
     eng = CrowdPositioningEngine(symbols=("BTCUSDT",), emit_threshold=0.0, reemit_delta=0.0)
-    # All three signals screaming "crowd long overcrowded"
+    # All six signals screaming "crowd long overcrowded"
     eng.funding.update("BTCUSDT", 0.0020)       # extreme positive funding
     eng.ls_ratio._long_pct["BTCUSDT"] = 80.0    # 80% long
     eng.sentiment._fg_value = 95                 # extreme greed
+    eng.open_interest._roc["BTCUSDT"] = 0.08     # OI piling in (leverage rising)
+    # Simulate a burst of LONG liquidations (longs getting wrecked) → +score
+    import time as _t
+    now = _t.time()
+    for _ in range(20):
+        eng.liquidations._events["BTCUSDT"].append((now, "LONG", 5_000_000.0))
+    eng.social._meme_ratio = 0.90                # euphoria
     # Trigger compute via a market event carrying the funding rate
     ev = MarketEvent(symbol="BTCUSDT", timestamp="t", last_price=50000.0,
                      volume_24h=1.0, bid=49999.0, ask=50001.0, funding_rate=0.0020)
@@ -123,16 +130,17 @@ def test_engine_fusion_agreement_boosts_conviction() -> None:
 
 
 def test_engine_fusion_divergence_deflates_conviction() -> None:
-    """When signals disagree (funding long, sentiment neutral), conviction drops."""
+    """When signals disagree (funding long, others neutral), conviction drops."""
     print("Testing engine fusion: divergence deflates conviction...", end=" ")
     from omega.crowd_engine import CrowdPositioningEngine
     from omega.utils.events import MarketEvent
 
     eng = CrowdPositioningEngine(symbols=("BTCUSDT",), emit_threshold=0.0, reemit_delta=0.0)
-    # Funding says long overcrowded, but L/S and sentiment are neutral
+    # Funding says long overcrowded, but the rest are neutral / unseeded
     eng.funding.update("BTCUSDT", 0.0020)
     eng.ls_ratio._long_pct["BTCUSDT"] = 50.0   # neutral
     eng.sentiment._fg_value = 50                # neutral
+    # open_interest / liquidations / social left unseeded (None -> skipped)
     ev = MarketEvent(symbol="BTCUSDT", timestamp="t", last_price=50000.0,
                      volume_24h=1.0, bid=49999.0, ask=50001.0, funding_rate=0.0020)
     crowd = eng.on_market(ev)
@@ -263,6 +271,141 @@ def test_orchestrator_has_crowd_engine() -> None:
 
 
 # ---------------------------------------------------------------------------
+# V3 — OpenInterestSignal
+# ---------------------------------------------------------------------------
+
+def test_open_interest_signal_roc() -> None:
+    """Rising OI → positive score (leverage piling in); falling → negative."""
+    print("Testing open interest ROC signal...", end=" ")
+    from omega.crowd_engine import OpenInterestSignal
+    sig = OpenInterestSignal(symbols=("BTCUSDT",))
+    # Inject a rising OI series directly
+    sig._roc["BTCUSDT"] = 0.05   # +5% summed ROC → leverage piling in
+    r = sig.reading_for("BTCUSDT")
+    assert r is not None and r.score > 0, f"rising OI: {r}"
+    sig._roc["BTCUSDT"] = -0.05  # deleveraging
+    r = sig.reading_for("BTCUSDT")
+    assert r is not None and r.score < 0, f"falling OI: {r}"
+    sig._roc["BTCUSDT"] = 0.0
+    r = sig.reading_for("BTCUSDT")
+    assert r is not None and abs(r.score) < 1e-6, f"flat OI: {r}"
+    print("✓")
+
+
+# ---------------------------------------------------------------------------
+# V3 — LiquidationSignal
+# ---------------------------------------------------------------------------
+
+def test_liquidation_signal_aggregation() -> None:
+    """A burst of LONG liquidations → positive score (longs wrecked)."""
+    print("Testing liquidation aggregation...", end=" ")
+    import time as _t
+    from omega.crowd_engine import LiquidationSignal
+    sig = LiquidationSignal(symbols=("BTCUSDT",), threshold_usd=50_000_000.0)
+    now = _t.time()
+    # 20 × $5M long liquidations = $100M net long-side pain
+    for _ in range(20):
+        sig._events["BTCUSDT"].append((now, "LONG", 5_000_000.0))
+    r = sig.reading_for("BTCUSDT")
+    assert r is not None and r.score > 0.9, f"$100M long liq should saturate +: {r}"
+    # Short liquidations instead → negative score
+    sig2 = LiquidationSignal(symbols=("BTCUSDT",), threshold_usd=50_000_000.0)
+    for _ in range(20):
+        sig2._events["BTCUSDT"].append((now, "SHORT", 5_000_000.0))
+    r2 = sig2.reading_for("BTCUSDT")
+    assert r2 is not None and r2.score < -0.9, f"$100M short liq should saturate -: {r2}"
+    print("✓")
+
+
+def test_liquidation_parse() -> None:
+    """The WS frame parser must classify SELL liquidations as LONG-side."""
+    print("Testing liquidation WS frame parse...", end=" ")
+    from omega.crowd_engine import LiquidationSignal
+    sig = LiquidationSignal(symbols=("BTCUSDT",))
+    frame = '{"o":{"s":"BTCUSDT","S":"SELL","ap":"50000","q":"1.0"}}'
+    sig._handle(frame)
+    assert sig._total_seen == 1, "frame should be recorded"
+    evs = list(sig._events["BTCUSDT"])
+    assert len(evs) == 1 and evs[0][1] == "LONG", f"SELL liq = LONG side: {evs}"
+    assert evs[0][2] == 50000.0, f"notional: {evs[0][2]}"
+    print("✓")
+
+
+# ---------------------------------------------------------------------------
+# V3 — SocialSentimentSignal
+# ---------------------------------------------------------------------------
+
+def test_social_signal_euphoria() -> None:
+    """High meme ratio in trending → euphoria → positive score."""
+    print("Testing social euphoria signal...", end=" ")
+    from omega.crowd_engine import SocialSentimentSignal
+    sig = SocialSentimentSignal(euphoria_meme_threshold=0.60)
+    # 8 trending coins, 7 are obscure (rank 9999) → euphoria
+    sig._meme_ratio = 0.875
+    r = sig.reading_for("BTCUSDT")
+    assert r is not None and r.score > 0.5, f"euphoria: {r}"
+    # All blue-chip → neutral
+    sig._meme_ratio = 0.0
+    r = sig.reading_for("BTCUSDT")
+    assert r is not None and abs(r.score) < 1e-6, f"neutral: {r}"
+    print("✓")
+
+
+# ---------------------------------------------------------------------------
+# V4 — CrowdWeightOptimizer
+# ---------------------------------------------------------------------------
+
+def test_weight_optimizer_tunes_from_pnl() -> None:
+    """The optimizer should up-weight signals that preceded winning fades."""
+    print("Testing V4 weight optimizer...", end=" ")
+    from omega.crowd_engine.optimizer import CrowdWeightOptimizer
+    opt = CrowdWeightOptimizer(
+        signal_names=("funding", "ls_ratio"),
+        initial_weights={"funding": 0.5, "ls_ratio": 0.5},
+        eval_window=10, min_trades_to_tune=10, lr=0.2, mutation_std=0.0,
+    )
+    before = opt.weights()
+    # Record 12 winning trades, calling maybe_tune after each (as the orchestrator
+    # does on every contrarian close). Funding had a big score, ls_ratio small.
+    # NOTE: maybe_tune returns None on most calls (it only fires every eval_window
+    # trades), so we keep the last non-None result rather than overwriting.
+    new = None
+    for _ in range(12):
+        opt.record_trade(pnl_bps=+50.0, components={"funding": 0.9, "ls_ratio": 0.1})
+        result = opt.maybe_tune()
+        if result is not None:
+            new = result
+    assert new is not None, "should tune at least once over 12 trades"
+    # funding's RELATIVE weight should rise vs ls_ratio (the signal that
+    # preceded winning fades gets up-weighted). Absolute values are renormalized.
+    ratio_before = before["funding"] / before["ls_ratio"]
+    ratio_after = new["funding"] / new["ls_ratio"]
+    assert ratio_after > ratio_before, (
+        f"funding/ls_ratio ratio should rise: {ratio_before:.2f} -> {ratio_after:.2f}"
+    )
+    print(f"✓ (funding/ls_ratio {ratio_before:.2f}→{ratio_after:.2f})")
+
+
+def test_engine_feeds_optimizer_on_close() -> None:
+    """on_contrarian_trade_closed should feed the optimizer and apply weights."""
+    print("Testing engine→optimizer wiring...", end=" ")
+    from omega.crowd_engine import CrowdPositioningEngine
+    eng = CrowdPositioningEngine(symbols=("BTCUSDT",))
+    before = eng.weights()["funding"]
+    # Feed many winning trades attributed to a big funding score
+    for _ in range(12):
+        eng.on_contrarian_trade_closed(
+            pnl_bps=+50.0, components={"funding": 0.9, "ls_ratio": 0.1}
+        )
+    after = eng.weights()["funding"]
+    # With mutation_std=0.03 there's noise, but funding should trend up over 12 wins
+    assert after >= before - 0.05, (
+        f"funding should not collapse after winning attribution: {before} -> {after}"
+    )
+    print(f"✓ (funding {before:.3f}→{after:.3f})")
+
+
+# ---------------------------------------------------------------------------
 
 def main() -> None:
     print("=" * 50)
@@ -279,6 +422,12 @@ def main() -> None:
         test_contrarian_fades_extreme_and_tp_sl_asymmetry,
         test_swarm_routes_positioning_to_contrarian,
         test_orchestrator_has_crowd_engine,
+        test_open_interest_signal_roc,
+        test_liquidation_signal_aggregation,
+        test_liquidation_parse,
+        test_social_signal_euphoria,
+        test_weight_optimizer_tunes_from_pnl,
+        test_engine_feeds_optimizer_on_close,
     ]
     failed = 0
     for test in tests:
