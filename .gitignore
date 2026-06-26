@@ -39,3 +39,9 @@ data/
 # Generated reports
 results.json
 autopsy_*.json
+
+# generated training/backtest data
+tests/_train_data.csv
+tests/_bt_small.csv
+checkpoints/*.pt
+checkpoints/*.log

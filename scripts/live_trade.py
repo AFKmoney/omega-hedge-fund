@@ -41,6 +41,9 @@ def parse_args() -> argparse.Namespace:
                    help="Comma-separated list (e.g. BTCUSDT,ETHUSDT)")
     p.add_argument("--log-level", type=str, default="INFO")
     p.add_argument("--stats-interval-sec", type=int, default=30)
+    p.add_argument("--load-checkpoints", action="store_true",
+                   help="Load trained PPO checkpoints from checkpoints/ (default: off)")
+    p.add_argument("--checkpoint-dir", type=str, default="checkpoints")
     return p.parse_args()
 
 
@@ -55,6 +58,11 @@ async def run() -> None:
         os.environ["OMEGA_LOG_LEVEL"] = args.log_level
     settings = load_settings()
     orchestrator = OmegaOrchestrator(settings)
+    # Optionally load trained PPO checkpoints so the agents use learned policies
+    # instead of random initializations.
+    if args.load_checkpoints:
+        loaded = orchestrator.alpha_swarm.load_ppo_checkpoints(args.checkpoint_dir)
+        logger.info(f"Loaded {loaded} PPO checkpoint(s)", extra={"component": "scripts"})
     # Handle Ctrl+C
     stop_event = asyncio.Event()
 

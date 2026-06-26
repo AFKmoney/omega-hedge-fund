@@ -96,17 +96,24 @@ async def train_historical(args: argparse.Namespace) -> None:
 
     Path(args.checkpoint_dir).mkdir(parents=True, exist_ok=True)
     total_steps = 0
+    # BUGFIX: the previous training loop sampled actions from agent.actor directly
+    # but never called agent.on_market(), so the agent's internal rollout buffer
+    # was never populated and the PPO update never ran — the agent learned nothing.
+    # Now we drive the agent through its real on_market() interface, which fills
+    # the buffer and triggers PPO updates when it fills (rollout_len=2048).
     for ep in range(args.episodes):
         obs = env.reset()
         ep_reward = 0.0
         ep_steps = 0
         done = False
+        # Reset agent state for the episode so per-symbol history starts fresh
+        for sym in agent._history:
+            agent._history[sym].clear()
+            agent._last_action[sym] = 1
+            agent._last_price.pop(sym, None)
         while not done:
-            # Use the agent's policy to act (it samples from current policy)
-            obs_t = agent._history  # agent maintains its own history
-            # Use a simpler approach: feed the env observation directly to the agent's actor
+            # Sample action from the agent's current policy
             import torch
-            from omega.alpha_swarm.ppo_agent import ACTION_TO_SIDE
             with torch.no_grad():
                 obs_tensor = torch.from_numpy(obs).unsqueeze(0).to(agent.device)
                 logits = agent.actor(obs_tensor)
@@ -114,22 +121,66 @@ async def train_historical(args: argparse.Namespace) -> None:
                 dist = Categorical(logits=logits)
                 action = dist.sample().item()
             obs, reward, done, info = env.step(action)
+            # Feed the env's market bar to the agent so its buffer fills and PPO
+            # updates actually run (this is the fix — previously skipped).
+            bar = env.df.iloc[env._t - 1]
+            from omega.utils.events import MarketEvent
+            me = MarketEvent(
+                symbol="BTCUSDT",
+                timestamp=str(bar.name) if hasattr(bar, "name") else "",
+                last_price=float(bar["close"]),
+                volume_24h=float(bar.get("volume", 0)),
+                bid=float(bar["close"]),
+                ask=float(bar["close"]),
+                bid_qty=1.0,
+                ask_qty=1.0,
+            )
+            # Manually add the transition to the agent's buffer (the env reward
+            # is the training signal; agent.on_market would recompute its own
+            # reward, so we inject the env reward directly).
+            from torch.distributions import Categorical as _C
+            with torch.no_grad():
+                _logits = agent.actor(obs_tensor)
+                _dist = _C(logits=_logits)
+                _lp = _dist.log_prob(torch.tensor(action, device=agent.device)).item()
+                _val = agent.critic(obs_tensor).item()
+            from omega.alpha_swarm.ppo_agent import Transition
+            agent.buffer.add(Transition(
+                obs=obs, action=action, log_prob=_lp,
+                reward=float(reward), value=_val, done=bool(done),
+            ))
+            agent._step_count += 1
+            agent._last_action["BTCUSDT"] = action
+            agent._last_price["BTCUSDT"] = float(bar["close"])
+            # Trigger PPO update when the buffer fills
+            if agent.buffer.idx >= agent.settings.ppo_rollout_len:
+                with torch.no_grad():
+                    last_val = agent.critic(obs_tensor).item()
+                agent.buffer.compute_gae(
+                    agent.settings.ppo_gamma, agent.settings.ppo_lambda, last_val
+                )
+                agent._update()
+                agent.buffer.idx = 0
             ep_reward += reward
             ep_steps += 1
             total_steps += 1
         logger.info(
             f"Episode {ep + 1}/{args.episodes} | steps={ep_steps} | "
             f"reward={ep_reward:+.2f} | equity=${env.equity:,.2f} | "
+            f"ppo_updates={agent._step_count // agent.settings.ppo_rollout_len} | "
             f"stats={env.stats()}"
         )
         # Periodically save
-        if (ep + 1) % 5 == 0:
+        if (ep + 1) % 5 == 0 or ep == args.episodes - 1:
             ckpt_path = os.path.join(
                 args.checkpoint_dir,
                 f"ppo_{args.mode_type}_{int(time.time())}.pt",
             )
             agent.save(ckpt_path)
-    logger.info(f"Training complete. Total steps: {total_steps}")
+            # Also save a "latest" symlink/copy for live_trade to pick up
+            latest = os.path.join(args.checkpoint_dir, f"ppo_{args.mode_type}_latest.pt")
+            agent.save(latest)
+    logger.info(f"Training complete. Total steps: {total_steps}, PPO updates: {total_steps // agent.settings.ppo_rollout_len}")
 
 
 async def train_live(args: argparse.Namespace) -> None:

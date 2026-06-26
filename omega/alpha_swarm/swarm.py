@@ -74,6 +74,35 @@ class AlphaSwarm:
             extra={"component": "alpha_swarm"},
         )
 
+    def load_ppo_checkpoints(self, checkpoint_dir: str = "checkpoints") -> int:
+        """Load the latest trained PPO checkpoints for each PPO agent.
+
+        Looks for ppo_<mode>_latest.pt in checkpoint_dir. Returns the number of
+        agents that successfully loaded a checkpoint.
+        """
+        import os
+        from pathlib import Path
+        loaded = 0
+        for agent in self.agents:
+            if not isinstance(agent, PPOAgent):
+                continue
+            ckpt = Path(checkpoint_dir) / f"ppo_{agent.mode}_latest.pt"
+            if ckpt.exists():
+                try:
+                    agent.load(str(ckpt))
+                    loaded += 1
+                except Exception as exc:
+                    logger.warning(
+                        f"Failed to load PPO checkpoint {ckpt}: {exc}",
+                        extra={"component": "alpha_swarm", "agent": agent.name},
+                    )
+            else:
+                logger.info(
+                    f"No checkpoint for {agent.name} at {ckpt} (untrained policy)",
+                    extra={"component": "alpha_swarm", "agent": agent.name},
+                )
+        return loaded
+
     async def stop(self) -> None:
         for agent in self.agents:
             if isinstance(agent, LLMMacroAgent):
