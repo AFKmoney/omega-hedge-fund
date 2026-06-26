@@ -1,8 +1,65 @@
 # OMEGA — Autonomous Contrarian AI Hedge Fund
 
-> A crypto-native trading system that doesn't trade the price — it trades **where the crowd is overcrowded**. Eight positioning signals detect statistical extremes in retail leverage, sentiment, and flow, then the ContrarianAgent fades them.
+> A crypto-native trading system that doesn't trade the price — it trades **where the crowd is overcrowded**. Eight positioning signals detect statistical extremes in retail leverage, sentiment, and flow, then the ContrarianAgent fades them. **Full glassmorphism web GUI controls 100% of the backend.**
 
-**Status**: Production-ready. OKX primary venue, Binance fallback. 54 tests passing. PPO agents trained (+11.9% trend, +21.1% meanrev vs −1.1% random). Crowd engine with 8 signals + auto-tuning weights. Secure wallet manager (TOTP + cap + panic).
+**Status**: Production-ready. OKX primary venue, Binance fallback. 54 tests passing. PPO agents trained (+11.9% trend, +21.1% meanrev vs −1.1% random). Crowd engine with 8 signals + auto-tuning weights. Secure wallet manager (TOTP + cap + panic). **Web dashboard** at `http://localhost:8080` with 7 tabs covering every function.
+
+---
+
+## Quick Start (3 commands)
+
+```bash
+pip install -r requirements.txt
+python tests/test_smoke.py                                    # verify install
+python scripts/dashboard.py                                   # open the GUI
+```
+
+The GUI opens in your browser. From there you configure keys, start trading, monitor the crowd engine, withdraw funds — everything. No CLI needed.
+
+---
+
+## The Web GUI (glassmorphism)
+
+```bash
+python scripts/dashboard.py           # http://localhost:8080
+```
+
+7 tabs, all controlling the live backend:
+
+| Tab | What it does |
+|-----|-------------|
+| **Dashboard** | Balance, P&L, positions, crowd regime, start/stop trading |
+| **Crowd Engine** | 8 signal bars (live), fusion weights (V4 auto-tuned), engine stats |
+| **Alpha Swarm** | 5 agents + regime weights |
+| **Risk** | Kill switch, Kelly, drawdown, equity |
+| **Wallet** | Withdraw form (TOTP), panic button, daily cap |
+| **Profiles** | Create/switch/delete credential profiles in one click |
+| **Settings** | Keystore — set/delete individual keys |
+
+Real-time updates via WebSocket. Every API endpoint returns 200 (audited).
+
+---
+
+## CLI alternatives (if you prefer terminal)
+
+```bash
+# Profile management (switch key sets without retyping)
+python -m omega.cli.profiles_cli list
+python -m omega.cli.profiles_cli add live-okx --use
+python -m omega.cli.profiles_cli use demo-okx
+python -m omega.cli.profiles_cli export live-okx keys.txt
+
+# Key management
+python -m omega.cli.keys list
+python -m omega.cli.keys wizard          # interactive setup
+python -m omega.cli.keys test            # verify OKX connection
+
+# Dashboard CLI
+python -m omega.cli.app dashboard
+python -m omega.cli.app status
+python -m omega.cli.app withdraw 100 USDT 0xAbc... ETH-ERC20 123456
+python -m omega.cli.app panic
+```
 
 ---
 

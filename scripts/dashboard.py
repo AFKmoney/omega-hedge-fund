@@ -24,7 +24,7 @@ from omega.web.server import OmegaWebServer
 def main() -> None:
     p = argparse.ArgumentParser(description="OMEGA glassmorphism dashboard")
     p.add_argument("--port", type=int, default=8080)
-    p.add_argument("--host", type=str, default="0.0.0.0")
+    p.add_argument("--host", type=str, default="127.0.0.1")
     p.add_argument("--no-browser", action="store_true", help="don't auto-open browser")
     args = p.parse_args()
 

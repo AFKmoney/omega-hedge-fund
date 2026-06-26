@@ -200,7 +200,7 @@ td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.03)}
       <div style="display:flex;gap:10px;align-items:flex-end">
         <div style="flex:1"><label>New Cap (USD)</label><input id="cap-val" placeholder="500"></div>
         <div><label>TOTP</label><input id="cap-totp" placeholder="123456" maxlength="6"></div>
-        <button class="btn" onclick="api('POST','/api/wallet/set-cap',{cap:parseFloat(capVal.value),totp:capTotp.value}).then(r=>r.ok?toast('Cap updated'):toast('Bad TOTP','err'))">Set</button>
+        <button class="btn" onclick="api('POST','/api/wallet/set-cap',{cap:parseFloat($('cap-val').value),totp:$('cap-totp').value}).then(r=>r.ok?toast('Cap updated'):toast('Bad TOTP','err'))">Set</button>
       </div>
     </div>
   </div>
@@ -235,7 +235,7 @@ td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.03)}
       <div style="display:flex;gap:10px;align-items:flex-end">
         <div style="flex:1"><label>Key Name</label><input id="k-name" placeholder="okx_api_key"></div>
         <div style="flex:1"><label>Value</label><input id="k-val" type="password"></div>
-        <button class="btn primary" onclick="api('POST','/api/keys/set',{key:kName.value,value:kVal.value}).then(()=>{toast('Key saved');loadKeys()})">Save</button>
+        <button class="btn primary" onclick="api('POST','/api/keys/set',{key:$('k-name').value,value:$('k-val').value}).then(()=>{toast('Key saved');loadKeys()})">Save</button>
       </div>
     </div>
   </div>
@@ -286,29 +286,27 @@ function updateLive(d){
   }
 }
 function renderCrowd(c){
-  const sigs=c.signals||{};const cont=$('crowdSignals');cont.innerHTML='';
-  const weights=c.weights||{};
-  for(const[name,info]of Object.entries(sigs)){
-    let score=0;if(info&&typeof info==='object'){const r=info.raw||{};score=r.score||0}
-    const w=weights[name]||0;
-    const row=document.createElement('div');row.className='signal-row';
+  const scores=c.live_scores||{};const weights=c.weights||{};
+  const cont=$('crowdSignals');cont.innerHTML='';
+  for(const[name,info]of Object.entries(scores)){
+    const score=(info&&typeof info.score==='number')?info.score:0;
     const pct=Math.abs(score)*50;const dir=score>=0?1:-1;
     const color=score>0.3?'var(--red)':score<-0.3?'var(--green)':'var(--txt-dim)';
+    const hasData=info&&info.has_data;
+    const row=document.createElement('div');row.className='signal-row';
     row.innerHTML=`
-      <div class="signal-name">${name}</div>
+      <div class="signal-name">${name}${hasData?'':' ◌'}</div>
       <div class="signal-bar"><div class="signal-fill" style="width:${pct}%;background:${color};${dir<0?'right:50%;left:auto;':''}"></div></div>
       <div class="signal-val">${score.toFixed(2)}</div>`;
     cont.appendChild(row);
   }
-  // weights
-  const ww=$('crowdWeights');ww.innerHTML='<table>';
-  for(const[n,w]of Object.entries(weights)){
-    ww.innerHTML+=`<tr><td>${n}</td><td>${w.toFixed(3)}</td></tr>`;
-  }
-  ww.innerHTML+='</table>';
-  // stats
+  const ww=$('crowdWeights');
+  let h='<table><thead><tr><th>Signal</th><th>Weight</th></tr></thead><tbody>';
+  for(const[n,w]of Object.entries(weights)){h+=`<tr><td>${n}</td><td>${w.toFixed(3)}</td></tr>`}
+  h+='</tbody></table>';ww.innerHTML=h;
   $('crowdStats').innerHTML=`<div class="metric-sub">Events emitted: <b>${c.events_emitted||0}</b></div>
-    <div class="metric-sub">Symbols: ${(c.symbols||[]).join(', ')}</div>`;
+    <div class="metric-sub">Symbols: ${(c.symbols||[]).join(', ')||'—'}</div>
+    <div class="metric-sub">Last crowd score: <b>${JSON.stringify(c.last_scores||{})}</b></div>`;
 }
 async function loadProfiles(){
   const r=await api('GET','/api/profiles');
@@ -325,7 +323,7 @@ async function loadProfiles(){
 async function useProfile(n){const r=await api('POST','/api/profiles/use',{name:n});toast(r.ok?'Switched to '+n:'Not found');loadProfiles()}
 async function delProfile(n){await api('DELETE','/api/profiles/'+n);toast('Deleted '+n);loadProfiles()}
 async function addProfile(){
-  const r=await api('POST','/api/profiles/add',{name:pName.value,fields:{okx_api_key:pKey.value,okx_api_secret:pSecret.value,okx_passphrase:pPass.value}});
+  const r=await api('POST','/api/profiles/add',{name:$('p-name').value,fields:{okx_api_key:$('p-key').value,okx_api_secret:$('p-secret').value,okx_passphrase:$('p-pass').value}});
   toast(r.ok?'Profile added':'Failed');loadProfiles();
 }
 async function loadKeys(){
@@ -339,7 +337,7 @@ async function loadKeys(){
   kl.innerHTML+='</tbody></table>';
 }
 async function doWithdraw(){
-  const r=await api('POST','/api/wallet/withdraw',{ccy:wCcy.value,amount:parseFloat(wAmt.value),address:wAddr.value,chain:wChain.value,totp:wTotp.value});
+  const r=await api('POST','/api/wallet/withdraw',{ccy:$('w-ccy').value,amount:parseFloat($('w-amt').value),address:$('w-addr').value,chain:$('w-chain').value,totp:$('w-totp').value});
   if(r.ok)toast('Withdrawal submitted ✓');else toast('Blocked: '+(r.reason||r.error||'unknown'),'err');
 }
 // Init

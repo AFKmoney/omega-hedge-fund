@@ -242,6 +242,58 @@ for t in tests/test_*.py; do python "$t"; done
 
 ---
 
+## Web GUI (Layer 7 — Control Surface)
+
+**Files**: `omega/web/server.py`, `omega/web/static/index.html`
+
+The glassmorphism dashboard is the primary control surface. It exposes 100% of
+the backend via REST + WebSocket — no function is CLI-only.
+
+### REST API (18 endpoints, all return 200 on success)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/status` | System overview (venue, running, counters) |
+| GET | `/api/balance` | USDT balance |
+| GET | `/api/positions` | Open positions (OKX) |
+| GET | `/api/crowd/signals` | 8 signals live scores + weights |
+| GET | `/api/swarm/agents` | Agent stats + regime weights |
+| GET | `/api/risk` | Risk Aegis state |
+| GET | `/api/execution` | Execution stats + fills |
+| GET | `/api/wallet` | Wallet status (panic, cap, spent) |
+| POST | `/api/wallet/withdraw` | Withdraw (TOTP required) |
+| POST | `/api/wallet/panic` | Freeze all withdrawals |
+| POST | `/api/wallet/unfreeze` | Unfreeze (TOTP) |
+| POST | `/api/wallet/set-cap` | Change daily cap (TOTP) |
+| GET | `/api/profiles` | List credential profiles |
+| POST | `/api/profiles/use` | Switch active profile |
+| POST | `/api/profiles/add` | Create profile |
+| DELETE | `/api/profiles/{name}` | Delete profile |
+| GET/POST/DELETE | `/api/keys` | Keystore CRUD |
+| POST | `/api/trading/start` `/stop` | Start/stop live trading |
+| WS | `/ws/live` | Real-time push (crowd, fills, prices every 2s) |
+
+### Frontend
+
+Single-file HTML/CSS/JS (no build step). Glassmorphism design: blur backdrop,
+gradient accents (blue/purple), dark mode. 7 tabs. Real-time WebSocket updates.
+Toast notifications. Responsive.
+
+---
+
+## Profile Manager + Keystore
+
+**Files**: `omega/config/profiles.py`, `omega/config/keystore.py`
+
+Two layers of credential persistence:
+- **Keystore**: individual key/value pairs, obfuscated (XOR+base64), machine-locked
+- **Profile Manager**: named sets of keys (live-okx, demo-okx) with instant switch
+
+Both store in `~/.omega/data/` (outside git, never committed). `load_settings()`
+auto-applies the active profile on startup.
+
+---
+
 ## Key design decisions
 
 1. **Contrarian is rule-based, not ML** — extremes are thresholds; ML smooths the tail events we want.

@@ -53,7 +53,7 @@ _STATIC_DIR = Path(__file__).resolve().parent / "static"
 class OmegaWebServer:
     """Web server exposing the full OMEGA backend via REST + WS."""
 
-    def __init__(self, port: int = 8080, host: str = "0.0.0.0") -> None:
+    def __init__(self, port: int = 8080, host: str = "127.0.0.1") -> None:
         self.port = port
         self.host = host
         self.app = web.Application(client_max_size=10 * 1024 * 1024)
@@ -153,7 +153,11 @@ class OmegaWebServer:
         if ex is None:
             return web.json_response([], status=200)
         try:
-            positions = await ex.get_positions()
+            # get_positions is OKX-only; BinanceExecutor lacks it
+            getter = getattr(ex, "get_positions", None)
+            if getter is None:
+                return web.json_response([], status=200)
+            positions = await getter()
             return web.json_response(positions)
         except Exception as exc:
             return web.json_response({"error": str(exc)}, status=500)
@@ -209,14 +213,14 @@ class OmegaWebServer:
     async def _api_wallet_panic(self, request: web.Request) -> web.Response:
         wm = self.orch.wallet_manager
         if wm is None:
-            return web.json_response({"ok": False, "error": "wallet not configured"}, status=400)
+            return web.json_response({"ok": False, "error": "wallet not configured (OKX only)"}, status=200)
         wm.panic()
         return web.json_response({"ok": True, "panic": True})
 
     async def _api_wallet_unfreeze(self, request: web.Request) -> web.Response:
         wm = self.orch.wallet_manager
         if wm is None:
-            return web.json_response({"ok": False}, status=400)
+            return web.json_response({"ok": False, "error": "wallet not configured"}, status=200)
         data = await request.json()
         ok = wm.unfreeze(data.get("totp", ""))
         return web.json_response({"ok": ok})
@@ -224,7 +228,7 @@ class OmegaWebServer:
     async def _api_wallet_set_cap(self, request: web.Request) -> web.Response:
         wm = self.orch.wallet_manager
         if wm is None:
-            return web.json_response({"ok": False}, status=400)
+            return web.json_response({"ok": False, "error": "wallet not configured"}, status=200)
         data = await request.json()
         ok = wm.set_daily_cap(float(data["cap"]), data.get("totp", ""))
         return web.json_response({"ok": ok, "cap": wm.daily_cap_usd})
@@ -343,9 +347,19 @@ class OmegaWebServer:
         runner = web.AppRunner(self.app)
         await runner.setup()
         site = web.TCPSite(runner, self.host, self.port)
-        await site.start()
-        logger.info(f"OMEGA dashboard: http://localhost:{self.port}")
-        # Keep running
+        try:
+            await site.start()
+        except OSError as exc:
+            logger.error(
+                f"Cannot bind port {self.port} ({exc}). "
+                f"Is another instance running? Try --port {self.port + 1}"
+            )
+            raise
+        url = f"http://{'localhost' if self.host in ('0.0.0.0','127.0.0.1') else self.host}:{self.port}"
+        logger.info(f"OMEGA dashboard ready: {url}")
+        print(f"\n  ╔══════════════════════════════════════╗")
+        print(f"  ║  OMEGA Dashboard: {url:<22}║")
+        print(f"  ╚══════════════════════════════════════╝\n")
         try:
             while True:
                 await asyncio.sleep(3600)

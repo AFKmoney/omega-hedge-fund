@@ -257,10 +257,22 @@ class CrowdPositioningEngine:
         return abs(crowd_score) * conviction * base
 
     def stats(self) -> dict:
+        # Include per-signal live scores for the first tracked symbol (for the
+        # dashboard / WS consumers).
+        live_scores = {}
+        sym = self.symbols[0] if self.symbols else ""
+        for sig in self._signals:
+            r = sig.reading_for(sym)
+            live_scores[sig.name] = {
+                "score": round(r.score, 4) if r else 0.0,
+                "horizon": r.horizon if r else sig.horizon,
+                "has_data": r is not None,
+            }
         return {
             "symbols": list(self.symbols),
             "events_emitted": self._events_emitted,
             "last_scores": self._last_emitted_score,
             "weights": self.weights(),
+            "live_scores": live_scores,
             "signals": {s.name: s.stats() for s in self._signals},
         }
