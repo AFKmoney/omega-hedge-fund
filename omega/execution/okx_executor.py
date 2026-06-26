@@ -68,6 +68,7 @@ class OKXExecutor(Executor):
         demo: bool = False,
         trade_swap: bool = True,   # default to perp (needed for funding crowd signals)
         rate_limit_per_min: int = 600,
+        force_dry_run: bool = False,
     ) -> None:
         self.api_key = api_key or os.getenv("OKX_API_KEY", "")
         self.api_secret = api_secret or os.getenv("OKX_API_SECRET", "")
@@ -79,11 +80,22 @@ class OKXExecutor(Executor):
         self._session: Optional[aiohttp.ClientSession] = None
         self._last_request_ts = 0.0
         self._min_interval = 60.0 / max(rate_limit_per_min, 1)
-        self._dry_run = not (self.api_key and self.api_secret and self.passphrase)
-        if self._dry_run:
+        # Paper-live mode: creds are present (so the feed reads real data and
+        # balance/positions work), but orders are logged, never submitted.
+        # Activated by OMEGA_PAPER env or the --paper flag.
+        paper_mode = force_dry_run or os.getenv("OMEGA_PAPER", "").lower() in ("1", "true", "yes")
+        self._dry_run = paper_mode or not (self.api_key and self.api_secret and self.passphrase)
+        if self._dry_run and not paper_mode:
             logger.warning(
                 "OKXExecutor in DRY-RUN mode (need OKX_API_KEY/SECRET/PASSPHRASE). "
                 "Orders logged but NOT submitted.",
+                extra={"component": "execution.okx"},
+            )
+        elif paper_mode:
+            logger.warning(
+                "OKXExecutor in PAPER-LIVE mode: real market data + balance reads, "
+                "but orders are LOGGED ONLY (not submitted). Set OMEGA_PAPER=false "
+                "to go fully live.",
                 extra={"component": "execution.okx"},
             )
         else:

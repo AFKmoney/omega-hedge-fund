@@ -44,17 +44,22 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--load-checkpoints", action="store_true",
                    help="Load trained PPO checkpoints from checkpoints/ (default: off)")
     p.add_argument("--checkpoint-dir", type=str, default="checkpoints")
+    p.add_argument("--paper", action="store_true",
+                   help="Paper-live: real OKX market data + balance reads, but "
+                        "orders are LOGGED ONLY (not submitted). Safe validation.")
     return p.parse_args()
 
 
 async def run() -> None:
     args = parse_args()
+    import os
+    # Paper-live mode: forces OKXExecutor dry-run even with creds present
+    if args.paper:
+        os.environ["OMEGA_PAPER"] = "true"
     # Override env vars from CLI args
     if args.symbols:
-        import os
         os.environ["OMEGA_SYMBOLS"] = args.symbols
     if args.log_level:
-        import os
         os.environ["OMEGA_LOG_LEVEL"] = args.log_level
     settings = load_settings()
     orchestrator = OmegaOrchestrator(settings)

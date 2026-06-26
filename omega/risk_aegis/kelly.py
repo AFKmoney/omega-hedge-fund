@@ -18,6 +18,7 @@ Formula:
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Optional
 
@@ -146,8 +147,13 @@ class KellyPositionSizer:
         if size_qty > max_qty_by_risk:
             size_qty = max_qty_by_risk
             size_usd = size_qty * price
-        # Hard floor: if size too small to be worth executing, reject
-        if size_usd < max(equity * 0.001, 10.0):
+        # Hard floor: if size too small to be worth executing, reject.
+        # The floor scales with equity: 0.1% of equity, but at least a minimum
+        # notional that can be set via OMEGA_MIN_NOTIONAL_USD (default $2 so
+        # micro-accounts of $50-100 can still trade).
+        min_notional = float(os.getenv("OMEGA_MIN_NOTIONAL_USD", "2.0"))
+        floor = max(equity * 0.001, min_notional)
+        if size_usd < floor:
             return KellyResult(
                 size_usd=0.0, size_qty=0.0,
                 kelly_fraction_raw=f_star, kelly_fraction_applied=f_applied,

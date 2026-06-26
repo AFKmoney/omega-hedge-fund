@@ -45,3 +45,6 @@ tests/_train_data.csv
 tests/_bt_small.csv
 checkpoints/*.pt
 checkpoints/*.log
+
+# OKX downloaded history
+tests/_okx_*.csv

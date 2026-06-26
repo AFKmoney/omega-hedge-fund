@@ -18,6 +18,7 @@ alpha generation.
 
 from __future__ import annotations
 
+import os
 import time
 from typing import List, Optional
 
@@ -112,7 +113,9 @@ class RiskAegis:
             self.monte_carlo.run(self.equity, current_position_value)
         mc_multiplier = self.monte_carlo._last_multiplier
         final_qty = kelly.size_qty * mc_multiplier
-        if final_qty * current_price < max(self.equity * 0.001, 10.0):
+        # Micro-capital friendly floor: same logic as Kelly (OMEGA_MIN_NOTIONAL_USD)
+        _min_notional = float(os.getenv("OMEGA_MIN_NOTIONAL_USD", "2.0"))
+        if final_qty * current_price < max(self.equity * 0.001, _min_notional):
             self._rejected_count += 1
             logger.info(
                 f"Signal rejected (post-MC size too small): {signal.symbol}",
