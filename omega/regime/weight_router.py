@@ -29,15 +29,13 @@ logger = get_logger("omega.regime.weights")
 
 
 WEIGHT_MATRIX: Dict[str, Dict[str, float]] = {
-    "calm_bull":     {"ppo_trend": 0.45, "ppo_meanrev": 0.10, "llm_macro": 0.20, "stat_arb": 0.15, "contrarian": 0.10},
-    "volatile_bull": {"ppo_trend": 0.25, "ppo_meanrev": 0.15, "llm_macro": 0.25, "stat_arb": 0.15, "contrarian": 0.20},
-    "choppy":        {"ppo_trend": 0.05, "ppo_meanrev": 0.35, "llm_macro": 0.15, "stat_arb": 0.20, "contrarian": 0.25},
-    "bear":          {"ppo_trend": 0.05, "ppo_meanrev": 0.25, "llm_macro": 0.30, "stat_arb": 0.20, "contrarian": 0.20},
-    "unknown":       {"ppo_trend": 0.20, "ppo_meanrev": 0.20, "llm_macro": 0.20, "stat_arb": 0.20, "contrarian": 0.20},
-    # Crowd-engine override: when the crowd is at a cascade-imminent extreme,
-    # defund trend (it'll be wrong) and boost contrarian (the cascade is the trade)
-    "crowd_cascade_long":  {"ppo_trend": 0.05, "ppo_meanrev": 0.10, "llm_macro": 0.20, "stat_arb": 0.15, "contrarian": 0.50},
-    "crowd_cascade_short": {"ppo_trend": 0.05, "ppo_meanrev": 0.10, "llm_macro": 0.20, "stat_arb": 0.15, "contrarian": 0.50},
+    "calm_bull":     {"ppo_trend": 0.30, "ppo_meanrev": 0.10, "llm_macro": 0.15, "stat_arb": 0.10, "contrarian": 0.10, "micro_scalp": 0.15, "micro_normal": 0.10},
+    "volatile_bull": {"ppo_trend": 0.20, "ppo_meanrev": 0.10, "llm_macro": 0.20, "stat_arb": 0.10, "contrarian": 0.15, "micro_scalp": 0.15, "micro_normal": 0.10},
+    "choppy":        {"ppo_trend": 0.05, "ppo_meanrev": 0.25, "llm_macro": 0.10, "stat_arb": 0.15, "contrarian": 0.15, "micro_scalp": 0.15, "micro_normal": 0.15},
+    "bear":          {"ppo_trend": 0.05, "ppo_meanrev": 0.15, "llm_macro": 0.20, "stat_arb": 0.15, "contrarian": 0.20, "micro_scalp": 0.10, "micro_normal": 0.15},
+    "unknown":       {"ppo_trend": 0.15, "ppo_meanrev": 0.15, "llm_macro": 0.15, "stat_arb": 0.15, "contrarian": 0.15, "micro_scalp": 0.15, "micro_normal": 0.10},
+    "crowd_cascade_long":  {"ppo_trend": 0.05, "ppo_meanrev": 0.05, "llm_macro": 0.15, "stat_arb": 0.10, "contrarian": 0.40, "micro_scalp": 0.10, "micro_normal": 0.15},
+    "crowd_cascade_short": {"ppo_trend": 0.05, "ppo_meanrev": 0.05, "llm_macro": 0.15, "stat_arb": 0.10, "contrarian": 0.40, "micro_scalp": 0.10, "micro_normal": 0.15},
 }
 
 

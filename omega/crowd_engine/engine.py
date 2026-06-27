@@ -65,9 +65,9 @@ class CrowdPositioningEngine:
         iceberg: Optional[IcebergDetectionSignal] = None,
         inflow: Optional[OnChainInflowSignal] = None,
         # Min |score| to emit an event at all (avoid spamming on noise)
-        emit_threshold: float = 0.20,
+        emit_threshold: float = 0.12,
         # Move in |score| required to re-emit for an already-extreme symbol
-        reemit_delta: float = 0.10,
+        reemit_delta: float = 0.06,
         cascade_conviction: float = 0.70,
     ) -> None:
         self.symbols = tuple(s.upper() for s in symbols)

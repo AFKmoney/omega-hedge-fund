@@ -19,6 +19,7 @@ from omega.alpha_swarm.base import AlphaAgent
 from omega.alpha_swarm.contrarian_agent import ContrarianAgent
 from omega.alpha_swarm.debate_chamber import DebateChamber
 from omega.alpha_swarm.llm_macro_agent import LLMMacroAgent
+from omega.alpha_swarm.micro_alpha import MicroAlphaEngine
 from omega.alpha_swarm.ppo_agent import PPOAgent
 from omega.alpha_swarm.stat_arb_agent import StatArbAgent
 from omega.config.settings import AlphaSwarmSettings, RegimeSettings
@@ -54,7 +55,8 @@ class AlphaSwarm:
 
     def _default_agents(self) -> List[AlphaAgent]:
         """Construct the default swarm: PPO trend + PPO meanrev + LLM macro +
-        stat-arb + contrarian (fades crowd-positioning extremes)."""
+        stat-arb + contrarian (fades crowd-positioning extremes) + micro-alpha
+        (frequent 3-tier scalp/normal/high-conviction signals)."""
         return [
             PPOAgent(self.symbols, mode="trend", settings=self.alpha_settings),
             PPOAgent(self.symbols, mode="meanrev", settings=self.alpha_settings),
@@ -62,6 +64,12 @@ class AlphaSwarm:
             StatArbAgent(self.symbols, settings=self.alpha_settings),
             ContrarianAgent(self.symbols),
         ]
+
+    def _init_micro_alpha(self) -> MicroAlphaEngine:
+        """Initialize the frequent-signal engine (3-tier conviction)."""
+        if not hasattr(self, "_micro_alpha") or self._micro_alpha is None:
+            self._micro_alpha = MicroAlphaEngine(symbols=self.symbols)
+        return self._micro_alpha
 
     async def start(self) -> None:
         """Initialize any async background tasks (LLM polling loop, etc.)."""
@@ -113,7 +121,7 @@ class AlphaSwarm:
         self.debate.set_agent_weights(weights)
 
     def on_market(self, event: MarketEvent) -> List[SignalEvent]:
-        """Fan out market event to all agents, collect raw signals, debate."""
+        """Fan out market event to all agents + micro-alpha engine, debate."""
         raw_signals: List[SignalEvent] = []
         for agent in self.agents:
             try:
@@ -123,6 +131,13 @@ class AlphaSwarm:
                     f"Agent {agent.name} crashed on market event: {exc}",
                     extra={"component": "alpha_swarm", "agent": agent.name},
                 )
+        # MicroAlphaEngine generates frequent 3-tier signals (scalp/normal/high)
+        try:
+            ma = self._init_micro_alpha()
+            raw_signals.extend(ma.on_market(event))
+        except Exception as exc:
+            logger.warning(f"MicroAlpha crashed: {exc}",
+                           extra={"component": "alpha_swarm"})
         return self._submit_to_debate(raw_signals)
 
     def on_news(self, event: NewsEvent) -> List[SignalEvent]:

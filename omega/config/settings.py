@@ -109,11 +109,13 @@ class RegimeSettings:
     # Regime labels (index-aligned): 0=calm bull, 1=volatile bull, 2=choppy, 3=bear
     agent_weight_matrix_path: str = "config/regime_weights.json"
     default_weights: Dict[str, float] = field(default_factory=lambda: {
-        "ppo_trend": 0.35,
+        "ppo_trend": 0.15,
         "ppo_meanrev": 0.15,
-        "llm_macro": 0.20,
+        "llm_macro": 0.15,
         "stat_arb": 0.15,
         "contrarian": 0.15,
+        "micro_scalp": 0.15,
+        "micro_normal": 0.10,
     })
 
 
@@ -130,7 +132,7 @@ class RiskAegisSettings:
     portfolio_correlation_threshold: float = 0.70
     portfolio_heat_max: float = 0.30        # max aggregate portfolio risk
     max_positions: int = 8
-    min_signal_confidence: float = 0.55
+    min_signal_confidence: float = 0.45
     # Hard kill-switch triggers (bypass AI entirely)
     kill_switch_latency_ms: float = 5000.0
     kill_switch_api_error_count: int = 5
