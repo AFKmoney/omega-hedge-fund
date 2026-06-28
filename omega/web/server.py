@@ -59,6 +59,13 @@ class OmegaWebServer:
         self.app = web.Application(client_max_size=10 * 1024 * 1024)
         self._orchestrator = None
         self._ws_clients: List[web.WebSocketResponse] = []
+        # Live OHLC buffer for the chart (symbol -> list of candles)
+        self._ohlc: Dict[str, List[dict]] = {}
+        self._current_candle: Dict[str, dict] = {}
+        self._candle_interval_sec = 15  # 15-second candles for the chart
+        self._mode = os.getenv("OMEGA_PAPER", "").lower() in ("1", "true", "yes")
+        # Feed OHLC from the orchestrator's market events
+        self._ohlc_task = None
         self._setup_routes()
 
     @property
@@ -100,6 +107,10 @@ class OmegaWebServer:
         self.app.router.add_get("/api/exchanges", self._api_exchanges)
         self.app.router.add_get("/api/web3/balance", self._api_web3_balance)
         self.app.router.add_get("/ws/live", self._ws_live)
+        # Chart data + mode
+        self.app.router.add_get("/api/chart/{symbol}", self._api_chart)
+        self.app.router.add_get("/api/mode", self._api_mode_get)
+        self.app.router.add_post("/api/mode", self._api_mode_set)
 
     # ------------------------------------------------------------------
     # Static GUI
@@ -343,6 +354,84 @@ class OmegaWebServer:
             return web.json_response({"error": str(exc)}, status=500)
 
     # ------------------------------------------------------------------
+    # Chart data + mode switcher
+    # ------------------------------------------------------------------
+
+    def feed_price(self, symbol: str, price: float) -> None:
+        """Feed a price tick into the OHLC buffer for the chart."""
+        import time
+        now = time.time()
+        candle_start = int(now // self._candle_interval_sec) * self._candle_interval_sec
+        cur = self._current_candle.get(symbol)
+        if cur is None or cur["t"] < candle_start:
+            # New candle
+            if cur is not None:
+                self._ohlc.setdefault(symbol, []).append(cur)
+                # Keep last 200 candles
+                if len(self._ohlc[symbol]) > 200:
+                    self._ohlc[symbol] = self._ohlc[symbol][-200:]
+            self._current_candle[symbol] = {
+                "t": candle_start, "o": price, "h": price, "l": price, "c": price,
+            }
+        else:
+            cur["h"] = max(cur["h"], price)
+            cur["l"] = min(cur["l"], price)
+            cur["c"] = price
+
+    async def _api_chart(self, request: web.Request) -> web.Response:
+        """Return OHLC history for the chart."""
+        symbol = request.match_info["symbol"].upper().replace("-", "")
+        # Feed the latest known price into the candle buffer so the chart has
+        # data even when no WS client is connected (the REST poll path).
+        try:
+            px = self.orch.risk_aegis.portfolio_heat._last_prices.get(symbol, 0)
+            if px > 0:
+                self.feed_price(symbol, px)
+        except Exception:
+            pass
+        candles = list(self._ohlc.get(symbol, []))
+        # Include the current forming candle
+        cur = self._current_candle.get(symbol)
+        if cur:
+            candles.append(cur.copy())
+        return web.json_response({"symbol": symbol, "interval_sec": self._candle_interval_sec,
+                                  "candles": candles[-200:]})
+
+    async def _api_mode_get(self, request: web.Request) -> web.Response:
+        """Return current trading mode."""
+        paper = os.getenv("OMEGA_PAPER", "").lower() in ("1", "true", "yes")
+        demo = os.getenv("OKX_DEMO", "").lower() in ("1", "true", "yes")
+        mode = "paper" if paper else ("testnet" if demo else "live")
+        return web.json_response({"mode": mode, "paper": paper, "demo": demo,
+                                  "description": {
+                                      "paper": "Real market data, orders LOGGED only (not submitted)",
+                                      "testnet": "OKX demo server with fake money, full execution",
+                                      "live": "REAL MONEY on OKX mainnet",
+                                  }.get(mode, "?")})
+
+    async def _api_mode_set(self, request: web.Request) -> web.Response:
+        """Switch trading mode. Requires restart to take full effect, but sets
+        the env var so the next start uses the new mode."""
+        data = await request.json()
+        mode = data.get("mode", "paper")
+        if mode == "paper":
+            os.environ["OMEGA_PAPER"] = "true"
+            os.environ["OKX_DEMO"] = "false"
+            self._mode = True
+        elif mode == "testnet":
+            os.environ["OMEGA_PAPER"] = "false"
+            os.environ["OKX_DEMO"] = "true"
+            self._mode = False
+        elif mode == "live":
+            os.environ["OMEGA_PAPER"] = "false"
+            os.environ["OKX_DEMO"] = "false"
+            self._mode = False
+        else:
+            return web.json_response({"ok": False, "error": "unknown mode"}, status=400)
+        return web.json_response({"ok": True, "mode": mode,
+                                  "msg": "Mode set. Restart trading for it to take effect."})
+
+    # ------------------------------------------------------------------
     # WebSocket live
     # ------------------------------------------------------------------
 
@@ -388,6 +477,15 @@ class OmegaWebServer:
             ex = await self._get_executor()
             if ex is not None:
                 out["balance"] = await ex.get_balance("USDT")
+            # Feed live prices into the OHLC chart buffer
+            try:
+                for sym in self.orch.settings.data_nexus.symbols:
+                    px = self.orch.risk_aegis.portfolio_heat._last_prices.get(sym, 0)
+                    if px > 0:
+                        self.feed_price(sym, px)
+                        out.setdefault("prices", {})[sym] = px
+            except Exception:
+                pass
         except Exception:
             pass
         return out
