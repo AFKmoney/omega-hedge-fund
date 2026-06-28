@@ -111,6 +111,12 @@ class OmegaWebServer:
         self.app.router.add_get("/api/chart/{symbol}", self._api_chart)
         self.app.router.add_get("/api/mode", self._api_mode_get)
         self.app.router.add_post("/api/mode", self._api_mode_set)
+        # Breakthroughs + settings + symbols
+        self.app.router.add_get("/api/breakthroughs", self._api_breakthroughs)
+        self.app.router.add_get("/api/settings", self._api_settings_get)
+        self.app.router.add_post("/api/settings", self._api_settings_set)
+        self.app.router.add_get("/api/symbols", self._api_symbols_get)
+        self.app.router.add_post("/api/symbols", self._api_symbols_set)
 
     # ------------------------------------------------------------------
     # Static GUI
@@ -430,6 +436,134 @@ class OmegaWebServer:
             return web.json_response({"ok": False, "error": "unknown mode"}, status=400)
         return web.json_response({"ok": True, "mode": mode,
                                   "msg": "Mode set. Restart trading for it to take effect."})
+
+    # ------------------------------------------------------------------
+    # Breakthroughs + settings + symbols
+    # ------------------------------------------------------------------
+
+    def _init_breakthroughs(self):
+        """Lazily instantiate the 25 breakthrough modules."""
+        if not hasattr(self, "_breakthroughs"):
+            try:
+                from omega.breakthroughs import (
+                    CascadePredictor, FundingForecast, WhaleTracker,
+                    GammaExposureSignal, DepegAlert, ToxicFlowDetector,
+                    SmartMoneyDivergence, VolatilityForecast, CorrelationBreakdown,
+                    FlashCrashScanner, VolumeProfile, TimeOfDayAlpha,
+                    BTCDominanceSignal, ExchangeReserves, MultiTimeframeSignal,
+                    StablecoinFlow, MempoolMonitor, BridgeTracker,
+                    EconomicCalendar, StressIndex, CrossVenueArbitrage,
+                    AdaptiveRiskManager, DeFiYieldScanner, SentimentNLP,
+                    PortfolioOptimizer,
+                )
+                self._breakthroughs = {
+                    "cascade_predictor": CascadePredictor(),
+                    "funding_forecast": FundingForecast(),
+                    "whale_tracker": WhaleTracker(),
+                    "gamma_signal": GammaExposureSignal(),
+                    "depeg_alert": DepegAlert(),
+                    "toxic_flow": ToxicFlowDetector(),
+                    "smart_money": SmartMoneyDivergence(),
+                    "vol_forecast": VolatilityForecast(),
+                    "correlation": CorrelationBreakdown(),
+                    "flash_crash": FlashCrashScanner(),
+                    "volume_profile": VolumeProfile(),
+                    "time_of_day": TimeOfDayAlpha(),
+                    "btc_dominance": BTCDominanceSignal(),
+                    "exchange_reserves": ExchangeReserves(),
+                    "multi_timeframe": MultiTimeframeSignal(),
+                    "stablecoin_flow": StablecoinFlow(),
+                    "mempool": MempoolMonitor(),
+                    "bridge_tracker": BridgeTracker(),
+                    "econ_calendar": EconomicCalendar(),
+                    "stress_index": StressIndex(),
+                    "cross_venue_arb": CrossVenueArbitrage(),
+                    "adaptive_risk": AdaptiveRiskManager(),
+                    "defi_yield": DeFiYieldScanner(),
+                    "sentiment_nlp": SentimentNLP(),
+                    "portfolio_opt": PortfolioOptimizer(),
+                }
+            except Exception as exc:
+                logger.warning(f"Breakthroughs init failed: {exc}")
+                self._breakthroughs = {}
+
+    async def _api_breakthroughs(self, request: web.Request) -> web.Response:
+        """Return all 25 breakthrough module stats."""
+        self._init_breakthroughs()
+        out = {}
+        for name, mod in self._breakthroughs.items():
+            try:
+                out[name] = mod.stats()
+            except Exception:
+                out[name] = {"name": name, "error": "stats failed"}
+        return web.json_response(out)
+
+    async def _api_settings_get(self, request: web.Request) -> web.Response:
+        """Return current editable settings (risk + execution params)."""
+        s = self.orch.settings
+        return web.json_response({
+            "risk": {
+                "per_trade_pct": s.risk.max_per_trade_risk_pct,
+                "kelly_fraction": s.risk.kelly_fraction,
+                "max_drawdown_pct": s.risk.max_portfolio_drawdown_pct,
+                "min_confidence": s.risk.min_signal_confidence,
+                "max_positions": getattr(s.risk, "max_positions", 8),
+            },
+            "execution": {
+                "venue": s.venue,
+                "min_notional": os.getenv("OMEGA_MIN_NOTIONAL_USD", "2.0"),
+            },
+            "symbols": list(s.data_nexus.symbols),
+        })
+
+    async def _api_settings_set(self, request: web.Request) -> web.Response:
+        """Update settings. Some require trading restart to take effect."""
+        data = await request.json()
+        changed = []
+        s = self.orch.settings
+        # We can't mutate frozen dataclasses, but we set env vars so the next
+        # restart picks them up. Live values that the orchestrator reads each
+        # signal cycle also get updated in place where possible.
+        if "per_trade_pct" in data:
+            os.environ["OMEGA_RISK_PER_TRADE_PCT"] = str(data["per_trade_pct"])
+            try: s.risk.max_per_trade_risk_pct = float(data["per_trade_pct"])
+            except: pass
+            changed.append("per_trade_pct")
+        if "kelly_fraction" in data:
+            os.environ["OMEGA_RISK_KELLY_FRACTION"] = str(data["kelly_fraction"])
+            try: s.risk.kelly_fraction = float(data["kelly_fraction"])
+            except: pass
+            changed.append("kelly_fraction")
+        if "max_drawdown_pct" in data:
+            os.environ["OMEGA_RISK_MAX_DRAWDOWN_PCT"] = str(data["max_drawdown_pct"])
+            try: s.risk.max_portfolio_drawdown_pct = float(data["max_drawdown_pct"])
+            except: pass
+            changed.append("max_drawdown_pct")
+        if "min_confidence" in data:
+            try: s.risk.min_signal_confidence = float(data["min_confidence"])
+            except: pass
+            changed.append("min_confidence")
+        if "min_notional" in data:
+            os.environ["OMEGA_MIN_NOTIONAL_USD"] = str(data["min_notional"])
+            changed.append("min_notional")
+        return web.json_response({"ok": True, "changed": changed,
+                                  "msg": "Settings updated (some need restart)"})
+
+    async def _api_symbols_get(self, request: web.Request) -> web.Response:
+        """Return the active trading symbols."""
+        return web.json_response({
+            "symbols": list(self.orch.settings.data_nexus.symbols),
+        })
+
+    async def _api_symbols_set(self, request: web.Request) -> web.Response:
+        """Set trading symbols. Requires restart to take full effect."""
+        data = await request.json()
+        syms = data.get("symbols", [])
+        if syms:
+            os.environ["OMEGA_SYMBOLS"] = ",".join(syms)
+            return web.json_response({"ok": True, "symbols": syms,
+                                      "msg": "Symbols set — restart trading to apply"})
+        return web.json_response({"ok": False, "error": "no symbols"}, status=400)
 
     # ------------------------------------------------------------------
     # WebSocket live

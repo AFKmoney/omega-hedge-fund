@@ -123,6 +123,8 @@ td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.02);font-variant-nu
     <button data-v="markets">Markets</button>
     <button data-v="wallet">Wallet</button>
     <button data-v="profiles">Profiles</button>
+    <button data-v="breakthroughs">Alpha+</button>
+    <button data-v="settings">Settings</button>
     <button data-v="web3">Web3</button>
   </nav>
   <div class="spacer"></div>
@@ -237,7 +239,16 @@ td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.02);font-variant-nu
 <div class="view" id="v-wallet">
   <div class="g" style="grid-template-columns:1fr 1fr">
     <div class="card"><h3>Wallet Status</h3><div id="wStatus"></div>
-      <button class="btn btn-stop" id="panicBtn" style="margin-top:10px">🚨 PANIC</button></div>
+      <button class="btn btn-stop" id="panicBtn" style="margin-top:10px">🚨 PANIC</button>
+      <div class="fl" style="margin-top:10px">
+        <div><label>Unfreeze TOTP</label><input id="uf-totp" placeholder="123456" maxlength="6"></div>
+        <button class="btn btn-go" id="ufBtn">Unfreeze</button>
+      </div>
+      <div class="fl" style="margin-top:6px">
+        <div><label>New daily cap $</label><input id="cap-val" placeholder="500"></div>
+        <div><label>TOTP</label><input id="cap-totp" placeholder="123456" maxlength="6"></div>
+        <button class="btn" id="capBtn">Set Cap</button>
+      </div></div>
     <div class="card"><h3>Withdraw</h3>
       <div class="fl"><div><label>Amount</label><input id="w-amt" placeholder="50"></div><div><label>Ccy</label><input id="w-ccy" value="USDT"></div></div>
       <div class="fl"><div style="flex:2"><label>Address</label><input id="w-addr" placeholder="0x…"></div><div><label>Chain</label><input id="w-chain" placeholder="ETH-ERC20"></div></div>
@@ -255,6 +266,48 @@ td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.02);font-variant-nu
     <div class="fl"><div><label>Name</label><input id="p-name" placeholder="live-okx"></div>
       <div><label>Key</label><input id="p-key"></div><div><label>Secret</label><input id="p-secret" type="password"></div>
       <div><label>Passphrase</label><input id="p-pass" type="password"></div><button class="btn btn-go" id="pBtn">Add</button></div>
+  </div>
+</div>
+
+<!-- ===== BREAKTHROUGHS (25 modules) ===== -->
+<div class="view" id="v-breakthroughs">
+  <div class="card">
+    <h3>🚀 25 Breakthrough Alpha Modules</h3>
+    <div class="agent-grid" id="btGrid"></div>
+  </div>
+</div>
+
+<!-- ===== SETTINGS ===== -->
+<div class="view" id="v-settings">
+  <div class="g" style="grid-template-columns:1fr 1fr">
+    <div class="card">
+      <h3>⚙️ Risk Parameters</h3>
+      <div class="fl"><div><label>Per-trade risk %</label><input id="s-risk" type="number" step="0.1" value="1.0"></div>
+        <div><label>Kelly fraction</label><input id="s-kelly" type="number" step="0.05" value="0.25"></div></div>
+      <div class="fl"><div><label>Max drawdown %</label><input id="s-dd" type="number" step="0.5" value="8.0"></div>
+        <div><label>Min confidence</label><input id="s-conf" type="number" step="0.05" value="0.45"></div></div>
+      <div class="fl"><div><label>Min notional $</label><input id="s-notional" type="number" step="0.5" value="2.0"></div></div>
+      <button class="btn btn-go" id="sBtn" onclick="saveSettings()">Save (restart to apply)</button>
+    </div>
+    <div class="card">
+      <h3>🎯 Trading Symbols</h3>
+      <div class="fl"><div><label>Symbols (comma-separated)</label><input id="s-symbols" value="BTCUSDT,ETHUSDT,SOLUSDT"></div></div>
+      <button class="btn btn-go" onclick="saveSymbols()">Set Symbols</button>
+      <div style="margin-top:8px"><span class="chip" onclick="$('s-symbols').value='BTCUSDT'">BTC</span>
+        <span class="chip" onclick="addSym('ETHUSDT')">+ETH</span>
+        <span class="chip" onclick="addSym('SOLUSDT')">+SOL</span>
+        <span class="chip" onclick="addSym('DOGEUSDT')">+DOGE</span>
+        <span class="chip" onclick="addSym('LINKUSDT')">+LINK</span>
+        <span class="chip" onclick="addSym('XRPUSDT')">+XRP</span>
+        <span class="chip" onclick="addSym('AVAXUSDT')">+AVAX</span></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <h3>🔑 Keystore</h3>
+    <div class="fl"><div><label>Key name</label><input id="k-name" placeholder="okx_api_key"></div>
+      <div><label>Value</label><input id="k-val" type="password"></div>
+      <button class="btn btn-go" onclick="setKey()">Set</button></div>
+    <table id="keysTable" style="margin-top:10px"><thead><tr><th>Field</th><th>Set</th><th>Profile</th></tr></thead><tbody></tbody></table>
   </div>
 </div>
 
@@ -479,8 +532,9 @@ setInterval(loadWallet,10000);
 // ===== PROFILES =====
 async function loadProf(){const r=await api('GET','/api/profiles');if(!$('profTable'))return;
   const tb=$('profTable').querySelector('tbody');tb.innerHTML='';
-  (r.profiles||[]).forEach(p=>{tb.innerHTML+=`<tr><td>${p.active?'▶':''}</td><td>${p.name}</td><td>${p.venue}</td><td>${p.demo?'demo':'live'}</td><td>${p.field_count}</td><td><button class="btn" onclick="useProf('${p.name}')">Use</button></td></tr>`});}
+  (r.profiles||[]).forEach(p=>{tb.innerHTML+=`<tr><td>${p.active?'▶':''}</td><td>${p.name}</td><td>${p.venue}</td><td>${p.demo?'demo':'live'}</td><td>${p.field_count}</td><td><button class="btn" onclick="useProf('${p.name}')">Use</button> <button class="btn btn-stop" onclick="delProf('${p.name}')">×</button></td></tr>`});}
 window.useProf=async n=>{toast((await api('POST','/api/profiles/use',{name:n})).ok?'Switched':'Fail');loadProf()};
+window.delProf=async n=>{toast((await api('DELETE','/api/profiles/'+n)).ok?'Deleted':'Fail');loadProf()};
 $('pBtn').onclick=async()=>{toast((await api('POST','/api/profiles/add',{name:$('p-name').value,fields:{okx_api_key:$('p-key').value,okx_api_secret:$('p-secret').value,okx_passphrase:$('p-pass').value}})).ok?'Added':'Fail');loadProf()};
 
 // ===== WEB3 =====
@@ -498,8 +552,80 @@ setInterval(async()=>{try{const r=await api('GET','/api/risk');
   if($('r-kelly'))$('r-kelly').textContent=r.kelly_fraction||0.25;
 }catch(e){}},5000);
 
+// ===== BREAKTHROUGHS =====
+async function loadBT(){
+  const r=await api('GET','/api/breakthroughs');
+  if(r.error||!Object.keys(r).length){if($('btGrid'))$('btGrid').innerHTML='<div class="sub">Loading 25 modules…</div>';return}
+  let h='';
+  for(const[name,stats]of Object.entries(r)){
+    const disp=stats.name||name;
+    // Extract a key metric from stats
+    let val='';
+    if(stats.risk!=null)val=`risk=${(stats.risk*100).toFixed(0)}%`;
+    else if(stats.score!=null)val=`score=${stats.score.toFixed(2)}`;
+    else if(stats.toxicity!=null)val=`toxic=${stats.toxicity.toFixed(2)}`;
+    else if(stats.stress!=null)val=`stress=${stats.stress.toFixed(0)}`;
+    else if(stats.tilt!=null)val=`tilt=${stats.tilt>=0?'+':''}${stats.tilt.toFixed(2)}`;
+    else if(stats.divergence!=null)val=`div=${stats.divergence.toFixed(3)}`;
+    else if(stats.forecast_vol_annualized!=null)val=`vol=${stats.forecast_vol_annualized.toFixed(1)}`;
+    else if(stats.alignment!=null)val=`align=${stats.alignment.toFixed(2)}`;
+    else if(stats.dominance!=null)val=`dom=${stats.dominance.toFixed(1)}%`;
+    else if(stats.aggregate!=null)val=`sent=${stats.aggregate>=0?'+':''}${stats.aggregate.toFixed(2)}`;
+    else if(stats.opportunities!=null)val=`arbs=${stats.opportunities.length}`;
+    else if(stats.multiplier!=null)val=`mult=${stats.multiplier.toFixed(2)}x`;
+    else val='—';
+    h+=`<div class="agent-card"><div class="dot on"></div><div class="agent-name">${disp}</div><div class="agent-sig">${val}</div></div>`;
+  }
+  if($('btGrid'))$('btGrid').innerHTML=h;
+}
+setInterval(()=>{if($('v-breakthroughs')&&$('v-breakthroughs').classList.contains('on'))loadBT()},5000);
+
+// ===== SETTINGS =====
+async function loadSettings(){
+  const r=await api('GET','/api/settings');
+  if(r.error)return;
+  if(r.risk){
+    if($('s-risk'))$('s-risk').value=r.risk.per_trade_pct;
+    if($('s-kelly'))$('s-kelly').value=r.risk.kelly_fraction;
+    if($('s-dd'))$('s-dd').value=r.risk.max_drawdown_pct;
+    if($('s-conf'))$('s-conf').value=r.risk.min_confidence;
+  }
+  if(r.execution&&$('s-notional'))$('s-notional').value=r.execution.min_notional;
+  if(r.symbols&&$('s-symbols'))$('s-symbols').value=(r.symbols||[]).join(',');
+}
+window.saveSettings=async()=>{
+  const r=await api('POST','/api/settings',{
+    per_trade_pct:parseFloat($('s-risk').value),kelly_fraction:parseFloat($('s-kelly').value),
+    max_drawdown_pct:parseFloat($('s-dd').value),min_confidence:parseFloat($('s-conf').value),
+    min_notional:parseFloat($('s-notional').value)});
+  toast(r.ok?'Settings saved':'Failed');
+};
+window.saveSymbols=async()=>{
+  const syms=$('s-symbols').value.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+  const r=await api('POST','/api/symbols',{symbols:syms});
+  toast(r.ok?'Symbols set — restart to apply':'Failed');
+};
+window.addSym=s=>{
+  const cur=$('s-symbols').value.split(',').map(x=>x.trim().toUpperCase());
+  if(!cur.includes(s)){$('s-symbols').value=[...cur,s].join(',')}
+};
+// Keys
+window.setKey=async()=>{toast((await api('POST','/api/keys/set',{key:$('k-name').value,value:$('k-val').value})).ok?'Key saved':'Fail');loadKeys()};
+async function loadKeys(){
+  const r=await api('GET','/api/keys');if(!$('keysTable'))return;
+  const tb=$('keysTable').querySelector('tbody');tb.innerHTML='';
+  for(const[profile,fields]of Object.entries(r.profiles||{})){
+    for(const[f,info]of Object.entries(fields)){
+      tb.innerHTML+=`<tr><td>${f}</td><td>${info.set?'✓':'✗'}</td><td>${profile}</td></tr>`;
+    }
+  }
+}
+// Wallet unfreeze + set-cap
+$('ufBtn').onclick=async()=>{const r=await api('POST','/api/wallet/unfreeze',{totp:$('uf-totp').value});toast(r.ok?'Unfrozen':'Bad TOTP',r.ok?'ok':'err');loadWallet()};
+$('capBtn').onclick=async()=>{const r=await api('POST','/api/wallet/set-cap',{cap:parseFloat($('cap-val').value),totp:$('cap-totp').value});toast(r.ok?'Cap set':'Bad TOTP',r.ok?'ok':'err');loadWallet()};
+
 // ===== INIT =====
-initChart();loadChart();poll();loadFills();loadProf();loadWallet();
+initChart();loadChart();poll();loadFills();loadProf();loadWallet();loadSettings();loadKeys();
 </script>
 </body>
 </html>
