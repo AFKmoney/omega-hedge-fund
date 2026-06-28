@@ -1,435 +1,468 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OMEGA — Hedge Fund Control</title>
+<title>OMEGA — Control Center</title>
 <style>
 :root{
-  --bg-0:#05060f; --bg-1:#0a0e1f; --glass:rgba(255,255,255,0.045);
-  --glass-brd:rgba(255,255,255,0.08); --txt:#e8eaf6; --txt-dim:#7a82a8;
-  --accent:#5b8cff; --accent-2:#9b6dff; --green:#22d39a; --red:#ff4d6d;
-  --amber:#ffb547; --radius:16px; --blur:18px;
+  --bg-0:#060814; --bg-1:#0d1124;
+  --glass:rgba(255,255,255,0.04);
+  --glass-brd:rgba(255,255,255,0.07);
+  --glass-hi:rgba(255,255,255,0.10);
+  --txt:#eaeef7; --txt-2:#a0a8c0; --txt-3:#5a6078;
+  --cyan:#00d4ff; --purple:#b066ff; --green:#00e887; --red:#ff3d71;
+  --amber:#ffb547; --r:14px; --blur:20px;
 }
-*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,-apple-system,sans-serif}
-body{
-  background:var(--bg-0);color:var(--txt);min-height:100vh;overflow-x:hidden;
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg-0);color:var(--txt);
+  min-height:100vh;overflow-x:hidden;
   background-image:
-    radial-gradient(ellipse 80% 50% at 20% -10%,rgba(91,140,255,.12),transparent),
-    radial-gradient(ellipse 60% 50% at 90% 10%,rgba(155,109,255,.10),transparent),
-    radial-gradient(ellipse 70% 60% at 50% 110%,rgba(34,211,154,.06),transparent);
+    radial-gradient(ellipse 90% 60% at 15% -5%,rgba(0,212,255,.10),transparent),
+    radial-gradient(ellipse 70% 50% at 85% 5%,rgba(176,102,255,.09),transparent),
+    radial-gradient(ellipse 60% 50% at 50% 100%,rgba(0,232,135,.04),transparent);
+  background-attachment:fixed;
 }
-.glass{
-  background:var(--glass);border:1px solid var(--glass-brd);
-  backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));
-  border-radius:var(--radius);
-}
-/* Top bar */
-.topbar{
-  position:sticky;top:0;z-index:100;display:flex;align-items:center;gap:16px;
-  padding:12px 24px;border-bottom:1px solid var(--glass-brd);
-  background:rgba(5,6,15,.7);backdrop-filter:blur(20px);
-}
-.logo{font-size:22px;font-weight:700;letter-spacing:2px;
-  background:linear-gradient(135deg,var(--accent),var(--accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.logo span{font-weight:300;font-size:14px;color:var(--txt-dim);-webkit-text-fill-color:var(--txt-dim)}
-.nav{display:flex;gap:4px;flex:1}
-.nav button{
-  background:none;border:none;color:var(--txt-dim);cursor:pointer;
-  padding:8px 16px;border-radius:10px;font-size:13px;transition:.2s
-}
+/* ===== TOPBAR ===== */
+.topbar{position:sticky;top:0;z-index:100;display:flex;align-items:center;gap:14px;
+  padding:10px 20px;background:rgba(6,8,20,.85);backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--glass-brd)}
+.logo{font-size:20px;font-weight:800;letter-spacing:3px;
+  background:linear-gradient(90deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo small{font-weight:300;font-size:11px;color:var(--txt-3);-webkit-text-fill-color:var(--txt-3);letter-spacing:0}
+.nav{display:flex;gap:2px;flex-wrap:wrap;flex:1}
+.nav button{background:none;border:none;color:var(--txt-2);cursor:pointer;
+  padding:7px 13px;border-radius:8px;font-size:12px;font-weight:600;transition:.15s}
 .nav button:hover{background:var(--glass);color:var(--txt)}
-.nav button.active{background:var(--glass);color:var(--accent)}
-.status-pill{
-  display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;
-  font-size:12px;font-weight:600;letter-spacing:.5px
-}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--txt-dim)}
-.dot.live{background:var(--green);box-shadow:0 0 8px var(--green)}
-.dot.dry{background:var(--amber);box-shadow:0 0 8px var(--amber)}
-/* Layout */
-.main{padding:24px;max-width:1600px;margin:0 auto}
-.view{display:none}.view.active{display:block}
-.grid{display:grid;gap:20px}
-.card{padding:22px}
-.card h3{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:var(--txt-dim);margin-bottom:14px}
-/* Metric */
-.metric{font-size:32px;font-weight:700;letter-spacing:-1px}
-.metric-sub{font-size:12px;color:var(--txt-dim);margin-top:4px}
+.nav button.active{background:var(--glass-hi);color:var(--cyan)}
+.pill{display:flex;align-items:center;gap:7px;padding:5px 12px;border-radius:20px;
+  background:var(--glass);border:1px solid var(--glass-brd);font-size:11px;font-weight:700}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--txt-3)}
+.pulse.live{background:var(--green);box-shadow:0 0 10px var(--green);animation:beat 1.5s infinite}
+.pulse.idle{background:var(--amber)}
+@keyframes beat{0%,100%{opacity:1}50%{opacity:.4}}
+/* ===== LAYOUT ===== */
+.wrap{max-width:1500px;margin:0 auto;padding:18px}
+.view{display:none}.view.on{display:block;animation:fade .25s}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1}}
+.g{display:grid;gap:16px}
+.card{background:var(--glass);border:1px solid var(--glass-brd);
+  backdrop-filter:blur(var(--blur));border-radius:var(--r);padding:18px}
+.card h3{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.8px;
+  color:var(--txt-3);margin-bottom:12px;display:flex;align-items:center;gap:6px}
+/* ===== METRICS ===== */
+.metric{font-size:28px;font-weight:800;letter-spacing:-0.5px;font-variant-numeric:tabular-nums}
+.sub{font-size:11px;color:var(--txt-3);margin-top:3px}
 .pos{color:var(--green)}.neg{color:var(--red)}
-/* Signal bars */
-.signal-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
-.signal-name{width:120px;font-size:12px;color:var(--txt-dim)}
-.signal-bar{flex:1;height:8px;background:rgba(255,255,255,.05);border-radius:4px;position:relative;overflow:hidden}
-.signal-fill{position:absolute;top:0;height:100%;border-radius:4px;transition:width .5s,background .5s;left:50%}
-.signal-val{width:50px;text-align:right;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
-/* Agent chips */
-.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;
-  background:var(--glass);font-size:11px;margin:2px;border:1px solid var(--glass-brd)}
-/* Buttons */
-.btn{
-  padding:10px 18px;border-radius:10px;border:1px solid var(--glass-brd);
-  background:var(--glass);color:var(--txt);cursor:pointer;font-size:13px;font-weight:600;transition:.2s
-}
-.btn:hover{background:rgba(255,255,255,.08)}
-.btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));border:none}
-.btn.primary:hover{opacity:.9}
-.btn.danger{background:rgba(255,77,109,.15);border-color:rgba(255,77,109,.3);color:var(--red)}
-.btn.danger:hover{background:rgba(255,77,109,.25)}
-.btn.green{background:rgba(34,211,154,.15);border-color:rgba(34,211,154,.3);color:var(--green)}
-/* Inputs */
-input,select{
-  width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--glass-brd);
-  background:rgba(0,0,0,.25);color:var(--txt);font-size:13px;outline:none
-}
-input:focus{border-color:var(--accent)}
-label{font-size:11px;color:var(--txt-dim);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:1px}
-.form-row{margin-bottom:14px}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th{text-align:left;color:var(--txt-dim);font-weight:600;font-size:11px;text-transform:uppercase;
-  letter-spacing:1px;padding:8px 12px;border-bottom:1px solid var(--glass-brd)}
-td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.03)}
-/* Toast */
-.toast{position:fixed;bottom:24px;right:24px;z-index:999;padding:14px 20px;border-radius:12px;
-  font-size:13px;font-weight:600;opacity:0;transform:translateY(20px);transition:.3s;max-width:400px}
-.toast.show{opacity:1;transform:translateY(0)}
-.toast.ok{background:rgba(34,211,154,.15);border:1px solid rgba(34,211,154,.3)}
-.toast.err{background:rgba(255,77,109,.15);border:1px solid rgba(255,77,109,.3)}
-@media(max-width:768px){.nav{flex-wrap:wrap}}
+/* ===== SIGNAL BARS ===== */
+.sig{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.sig-n{width:95px;font-size:11px;color:var(--txt-2);font-weight:600}
+.sig-track{flex:1;height:7px;background:rgba(255,255,255,.04);border-radius:4px;position:relative;overflow:hidden}
+.sig-fill{position:absolute;top:0;height:100%;border-radius:4px;transition:.4s}
+.sig-v{width:48px;text-align:right;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
+/* ===== TABLE ===== */
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;color:var(--txt-3);font-weight:700;font-size:9px;
+  text-transform:uppercase;letter-spacing:1px;padding:7px 10px;
+  border-bottom:1px solid var(--glass-brd)}
+td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.02);font-variant-numeric:tabular-nums}
+tr:hover td{background:rgba(255,255,255,.015)}
+/* ===== BUTTONS / INPUTS ===== */
+.btn{padding:9px 16px;border-radius:9px;border:1px solid var(--glass-brd);
+  background:var(--glass);color:var(--txt);cursor:pointer;font-size:12px;font-weight:700;transition:.15s}
+.btn:hover{background:var(--glass-hi)}
+.btn-go{background:linear-gradient(135deg,var(--green),#00b86a);border:none;color:#001}
+.btn-go:hover{opacity:.9}
+.btn-stop{background:linear-gradient(135deg,var(--red),#c42856);border:none}
+.btn-warn{background:rgba(255,181,71,.12);border-color:rgba(255,181,71,.3);color:var(--amber)}
+input,select{width:100%;padding:9px 12px;border-radius:9px;border:1px solid var(--glass-brd);
+  background:rgba(0,0,0,.3);color:var(--txt);font-size:12px;outline:none}
+input:focus{border-color:var(--cyan)}
+label{font-size:9px;color:var(--txt-3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px}
+.fl{display:flex;gap:10px;margin-bottom:10px;align-items:flex-end}
+.fl>div{flex:1}
+/* ===== CHIPS ===== */
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:7px;
+  background:var(--glass);font-size:10px;margin:2px;border:1px solid var(--glass-brd)}
+/* ===== TOAST ===== */
+#toast{position:fixed;bottom:20px;right:20px;z-index:999;padding:12px 18px;border-radius:10px;
+  font-size:12px;font-weight:700;opacity:0;transform:translateY(20px);transition:.3s;max-width:380px}
+#toast.show{opacity:1;transform:translateY(0)}
+#toast.ok{background:rgba(0,232,135,.15);border:1px solid rgba(0,232,135,.3)}
+#toast.err{background:rgba(255,61,113,.15);border:1px solid rgba(255,61,113,.3)}
+/* ===== SPINNER ===== */
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--glass-brd);
+  border-top-color:var(--cyan);border-radius:50%;animation:sp .6s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+/* ===== TICKER ===== */
+.ticker{display:flex;gap:16px;overflow:hidden;padding:6px 0;font-size:11px;color:var(--txt-2);
+  border-top:1px solid var(--glass-brd);background:rgba(6,8,20,.6)}
+.ticker div{white-space:nowrap}
+.ticker b{color:var(--cyan)}
+/* ===== FILLS FEED ===== */
+.feed-item{padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.02);font-size:11px;display:flex;gap:8px;align-items:center}
+.feed-item .tag{font-size:9px;padding:2px 6px;border-radius:4px;font-weight:700}
+.tag.buy{background:rgba(0,232,135,.15);color:var(--green)}
+.tag.sell{background:rgba(255,61,113,.15);color:var(--red)}
+.tag.scalp{background:rgba(0,212,255,.12);color:var(--cyan)}
+.tag.contrarian{background:rgba(176,102,255,.12);color:var(--purple)}
+@media(max-width:768px){.nav{overflow-x:auto;flex-wrap:nowrap}}
 </style>
 </head>
 <body>
 
-<div class="topbar glass">
-  <div class="logo">OMEGA <span>Hedge Fund</span></div>
-  <nav class="nav">
-    <button class="active" onclick="show('dashboard')">Dashboard</button>
-    <button onclick="show('crowd')">Crowd Engine</button>
-    <button onclick="show('swarm')">Alpha Swarm</button>
-    <button onclick="show('risk')">Risk</button>
-    <button onclick="show('wallet')">Wallet</button>
-    <button onclick="show('profiles')">Profiles</button>
-    <button onclick="show('markets')">Markets</button>
-    <button onclick="show('web3')">Web3</button>
-    <button onclick="show('settings')">Settings</button>
+<div class="topbar">
+  <div class="logo">OMEGA<small> hedge fund</small></div>
+  <nav class="nav" id="nav">
+    <button class="on" data-v="dash">Dashboard</button>
+    <button data-v="crowd">Crowd</button>
+    <button data-v="swarm">Swarm</button>
+    <button data-v="risk">Risk</button>
+    <button data-v="fills">Activity</button>
+    <button data-v="markets">Markets</button>
+    <button data-v="wallet">Wallet</button>
+    <button data-v="profiles">Profiles</button>
+    <button data-v="web3">Web3</button>
   </nav>
-  <div class="status-pill glass">
-    <div class="dot" id="statusDot"></div>
-    <span id="statusText">Connecting…</span>
-  </div>
+  <div class="pill"><div class="pulse idle" id="dot"></div><span id="dotTxt">IDLE</span></div>
 </div>
 
-<div class="main">
-  <!-- DASHBOARD -->
-  <div class="view active" id="view-dashboard">
-    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
-      <div class="card glass"><h3>Balance (USDT)</h3><div class="metric" id="m-balance">—</div><div class="metric-sub" id="m-venue">venue: —</div></div>
-      <div class="card glass"><h3>P&amp;L (session)</h3><div class="metric" id="m-pnl">—</div><div class="metric-sub">realized + unrealized</div></div>
-      <div class="card glass"><h3>Open Positions</h3><div class="metric" id="m-positions">0</div><div class="metric-sub" id="m-posdetail"></div></div>
-      <div class="card glass"><h3>Crowd Regime</h3><div class="metric" id="m-crowd" style="font-size:20px">neutral</div><div class="metric-sub" id="m-crowdev">0 events</div></div>
-    </div>
-    <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:20px">
-      <div class="card glass">
-        <h3>Trading Control</h3>
-        <div style="display:flex;gap:12px;margin-top:8px">
-          <button class="btn green" onclick="api('POST','/api/trading/start',{}).then(r=>toast('Trading started'))">Start</button>
-          <button class="btn danger" onclick="api('POST','/api/trading/stop',{}).then(r=>toast('Trading stopped'))">Stop</button>
-          <div style="flex:1"></div>
-          <div class="metric-sub" style="align-self:center">Signals: <b id="m-signals">0</b> · Orders: <b id="m-orders">0</b> · Fills: <b id="m-fills">0</b></div>
-        </div>
-      </div>
-      <div class="card glass">
-        <h3>Positions</h3>
-        <table><thead><tr><th>Symbol</th><th>Side</th><th>Size</th><th>uPnL</th></tr></thead>
-        <tbody id="posTable"><tr><td colspan="4" style="color:var(--txt-dim)">No open positions</td></tr></tbody></table>
-      </div>
-    </div>
-  </div>
+<!-- TICKER -->
+<div class="ticker" id="ticker"><div>Connecting to live data…</div></div>
 
-  <!-- CROWD ENGINE -->
-  <div class="view" id="view-crowd">
-    <div class="card glass">
-      <h3>Crowd Positioning — 8 Signals (live)</h3>
-      <div id="crowdSignals" style="margin-top:10px"></div>
-    </div>
-    <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:20px">
-      <div class="card glass"><h3>Fusion Weights (V4 auto-tuned)</h3><div id="crowdWeights"></div></div>
-      <div class="card glass"><h3>Engine Stats</h3><div id="crowdStats"></div></div>
-    </div>
-  </div>
+<div class="wrap">
 
-  <!-- ALPHA SWARM -->
-  <div class="view" id="view-swarm">
-    <div class="card glass">
-      <h3>Agents</h3>
-      <div id="agentList" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
-    </div>
-    <div class="card glass" style="margin-top:20px"><h3>Regime Weights</h3><div id="regimeWeights"></div></div>
+<!-- ============ DASHBOARD ============ -->
+<div class="view on" id="v-dash">
+  <div class="g" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr))">
+    <div class="card"><h3>◉ Balance</h3><div class="metric" id="m-bal">$0</div><div class="sub" id="m-venue">—</div></div>
+    <div class="card"><h3>📈 Signals</h3><div class="metric" id="m-sig">0</div><div class="sub" id="m-sigSub">processed</div></div>
+    <div class="card"><h3>⚡ Orders</h3><div class="metric" id="m-ord">0</div><div class="sub">sent</div></div>
+    <div class="card"><h3>✓ Fills</h3><div class="metric" id="m-fill">0</div><div class="sub" id="m-fillSub">executed</div></div>
+    <div class="card"><h3>🌊 Crowd</h3><div class="metric" id="m-crowd" style="font-size:18px">neutral</div><div class="sub" id="m-crowdSub">0 events</div></div>
   </div>
-
-  <!-- RISK -->
-  <div class="view" id="view-risk">
-    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
-      <div class="card glass"><h3>Kill Switch</h3><div class="metric" id="r-kill" style="font-size:20px">—</div></div>
-      <div class="card glass"><h3>Kelly Fraction</h3><div class="metric" id="r-kelly">—</div></div>
-      <div class="card glass"><h3>Max Drawdown</h3><div class="metric" id="r-dd">—</div></div>
-      <div class="card glass"><h3>Equity</h3><div class="metric" id="r-equity">—</div></div>
-    </div>
-  </div>
-
-  <!-- WALLET -->
-  <div class="view" id="view-wallet">
-    <div class="grid" style="grid-template-columns:1fr 1fr">
-      <div class="card glass">
-        <h3>Wallet Status</h3>
-        <div id="walletStatus"></div>
-        <div style="display:flex;gap:10px;margin-top:16px">
-          <button class="btn danger" onclick="api('POST','/api/wallet/panic',{}).then(()=>toast('PANIC ENGAGED'))">🚨 PANIC</button>
-        </div>
+  <div class="g" style="grid-template-columns:1fr 1fr;margin-top:16px">
+    <div class="card">
+      <h3>🎮 Trading Control</h3>
+      <div style="display:flex;gap:10px;align-items:center">
+        <button class="btn btn-go" id="btnStart">▶ START</button>
+        <button class="btn btn-stop" id="btnStop">■ STOP</button>
       </div>
-      <div class="card glass">
-        <h3>Withdraw Funds</h3>
-        <div class="form-row"><label>Amount</label><input id="w-amt" placeholder="100"></div>
-        <div class="form-row"><label>Currency</label><input id="w-ccy" value="USDT"></div>
-        <div class="form-row"><label>Destination Address</label><input id="w-addr" placeholder="0x..."></div>
-        <div class="form-row"><label>Chain</label><input id="w-chain" placeholder="ETH-ERC20"></div>
-        <div class="form-row"><label>TOTP Code (from phone)</label><input id="w-totp" placeholder="123456" maxlength="6"></div>
-        <button class="btn primary" onclick="doWithdraw()">Withdraw</button>
-      </div>
+      <div class="sub" style="margin-top:8px">Paper mode active — orders logged only</div>
     </div>
-    <div class="card glass" style="margin-top:20px">
-      <h3>Change Daily Cap</h3>
-      <div style="display:flex;gap:10px;align-items:flex-end">
-        <div style="flex:1"><label>New Cap (USD)</label><input id="cap-val" placeholder="500"></div>
-        <div><label>TOTP</label><input id="cap-totp" placeholder="123456" maxlength="6"></div>
-        <button class="btn" onclick="api('POST','/api/wallet/set-cap',{cap:parseFloat($('cap-val').value),totp:$('cap-totp').value}).then(r=>r.ok?toast('Cap updated'):toast('Bad TOTP','err'))">Set</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- PROFILES -->
-  <div class="view" id="view-profiles">
-    <div class="card glass">
-      <h3>Credential Profiles</h3>
-      <table><thead><tr><th></th><th>Name</th><th>Venue</th><th>Mode</th><th>Fields</th><th></th></tr></thead>
-      <tbody id="profileTable"></tbody></table>
-    </div>
-    <div class="card glass" style="margin-top:20px">
-      <h3>Add Profile</h3>
-      <div style="display:flex;gap:10px;align-items:flex-end">
-        <div style="flex:1"><label>Profile Name</label><input id="p-name" placeholder="live-okx"></div>
-        <div style="flex:1"><label>OKX API Key</label><input id="p-key"></div>
-        <div style="flex:1"><label>OKX Secret</label><input id="p-secret" type="password"></div>
-        <div style="flex:1"><label>Passphrase</label><input id="p-pass" type="password"></div>
-        <button class="btn primary" onclick="addProfile()">Add</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MARKETS (cross-venue price aggregator) -->
-  <div class="view" id="view-markets">
-    <div class="card glass">
-      <h3>Cross-Venue Prices (10 exchanges live)</h3>
-      <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:14px">
-        <div style="flex:1"><label>Symbol</label><input id="mkt-sym" value="BTCUSDT"></div>
-        <button class="btn primary" onclick="loadMarkets()">Refresh</button>
-      </div>
-      <table><thead><tr><th>Venue</th><th>Price</th><th>Bid</th><th>Ask</th><th>vs Median</th></tr></thead>
-      <tbody id="marketTable"><tr><td colspan="5" style="color:var(--txt-dim)">Click Refresh</td></tr></tbody></table>
-      <div id="marketSummary" style="margin-top:12px"></div>
-    </div>
-    <div class="card glass" style="margin-top:20px">
-      <h3>Supported Exchanges</h3>
-      <div id="exchangeList" style="display:flex;flex-wrap:wrap;gap:6px"></div>
-    </div>
-  </div>
-
-  <!-- WEB3 (MetaMask wallet) -->
-  <div class="view" id="view-web3">
-    <div class="card glass">
-      <h3>Web3 Wallet (MetaMask-compatible)</h3>
-      <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:14px">
-        <div style="flex:2"><label>Wallet Address (0x...)</label><input id="w3-addr" placeholder="0xAbc..."></div>
-        <div style="flex:1"><label>Chain</label>
-          <select id="w3-chain"><option>ethereum</option><option>polygon</option><option>bsc</option><option>arbitrum</option><option>base</option></select>
-        </div>
-        <button class="btn primary" onclick="loadWeb3()">Read Balance</button>
-      </div>
-      <div id="web3Balances"></div>
-    </div>
-  </div>
-
-  <!-- SETTINGS -->
-  <div class="view" id="view-settings">
-    <div class="card glass">
-      <h3>Keystore (individual keys)</h3>
-      <div id="keysList"></div>
-    </div>
-    <div class="card glass" style="margin-top:20px">
-      <h3>Set a Key</h3>
-      <div style="display:flex;gap:10px;align-items:flex-end">
-        <div style="flex:1"><label>Key Name</label><input id="k-name" placeholder="okx_api_key"></div>
-        <div style="flex:1"><label>Value</label><input id="k-val" type="password"></div>
-        <button class="btn primary" onclick="api('POST','/api/keys/set',{key:$('k-name').value,value:$('k-val').value}).then(()=>{toast('Key saved');loadKeys()})">Save</button>
-      </div>
+    <div class="card">
+      <h3>📍 Open Positions</h3>
+      <div id="posBox" style="font-size:12px;color:var(--txt-3)">No open positions</div>
     </div>
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<!-- ============ CROWD ENGINE ============ -->
+<div class="view" id="v-crowd">
+  <div class="card">
+    <h3>🧠 Crowd Positioning — 8 Signals Live</h3>
+    <div id="crowdBars"></div>
+  </div>
+  <div class="g" style="grid-template-columns:1fr 1fr;margin-top:16px">
+    <div class="card"><h3>⚖️ Fusion Weights (V4 auto-tuned)</h3><div id="crowdW"></div></div>
+    <div class="card"><h3>📊 Engine Stats</h3><div id="crowdSt"></div></div>
+  </div>
+</div>
+
+<!-- ============ ALPHA SWARM ============ -->
+<div class="view" id="v-swarm">
+  <div class="card"><h3>🤖 Agents</h3><div id="agentsBox"></div></div>
+  <div class="card" style="margin-top:16px"><h3>🎛️ Active Regime</h3><div id="regimeBox"></div></div>
+</div>
+
+<!-- ============ RISK ============ -->
+<div class="view" id="v-risk">
+  <div class="g" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+    <div class="card"><h3>🛡️ Kill Switch</h3><div class="metric" id="r-kill" style="font-size:16px">—</div></div>
+    <div class="card"><h3>💰 Equity</h3><div class="metric" id="r-eq">—</div></div>
+    <div class="card"><h3>📉 Max DD</h3><div class="metric" id="r-dd">—</div></div>
+    <div class="card"><h3>🎯 Kelly Frac</h3><div class="metric" id="r-kelly">—</div></div>
+  </div>
+</div>
+
+<!-- ============ ACTIVITY FEED ============ -->
+<div class="view" id="v-fills">
+  <div class="card">
+    <h3>⚡ Live Signal + Fill Feed</h3>
+    <div id="feedBox" style="max-height:500px;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- ============ MARKETS ============ -->
+<div class="view" id="v-markets">
+  <div class="card">
+    <h3>🌐 Cross-Venue Prices</h3>
+    <div class="fl">
+      <div><label>Symbol</label><input id="mk-sym" value="BTCUSDT"></div>
+      <button class="btn btn-go" id="mkBtn">Scan 10 exchanges</button>
+    </div>
+    <table id="mkTable"><thead><tr><th>Venue</th><th>Price</th><th>Bid</th><th>Ask</th><th>Δ median</th></tr></thead>
+    <tbody><tr><td colspan="5" style="color:var(--txt-3)">Click Scan</td></tr></tbody></table>
+    <div id="mkSummary" style="margin-top:10px"></div>
+  </div>
+  <div class="card" style="margin-top:16px"><h3>🏛️ Supported Exchanges</h3><div id="exList"></div></div>
+</div>
+
+<!-- ============ WALLET ============ -->
+<div class="view" id="v-wallet">
+  <div class="g" style="grid-template-columns:1fr 1fr">
+    <div class="card">
+      <h3>🔐 Wallet Status</h3>
+      <div id="wStatus"></div>
+      <button class="btn btn-stop" id="panicBtn" style="margin-top:14px">🚨 PANIC FREEZE</button>
+    </div>
+    <div class="card">
+      <h3>💸 Withdraw</h3>
+      <div class="fl"><div><label>Amount</label><input id="w-amt" placeholder="50"></div><div><label>Currency</label><input id="w-ccy" value="USDT"></div></div>
+      <div class="fl"><div style="flex:2"><label>Address</label><input id="w-addr" placeholder="0x…"></div><div><label>Chain</label><input id="w-chain" placeholder="ETH-ERC20"></div></div>
+      <div class="fl"><div><label>TOTP Code</label><input id="w-totp" placeholder="123456" maxlength="6"></div><button class="btn btn-go" id="wBtn">Withdraw</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PROFILES ============ -->
+<div class="view" id="v-profiles">
+  <div class="card">
+    <h3>🔑 Credential Profiles</h3>
+    <table id="profTable"><thead><tr><th>Active</th><th>Name</th><th>Venue</th><th>Mode</th><th>Fields</th><th></th></tr></thead><tbody></tbody></table>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h3>➕ Add Profile</h3>
+    <div class="fl"><div><label>Name</label><input id="p-name" placeholder="live-okx"></div>
+      <div><label>OKX Key</label><input id="p-key"></div>
+      <div><label>Secret</label><input id="p-secret" type="password"></div>
+      <div><label>Passphrase</label><input id="p-pass" type="password"></div>
+      <button class="btn btn-go" id="pBtn">Add</button></div>
+  </div>
+</div>
+
+<!-- ============ WEB3 ============ -->
+<div class="view" id="v-web3">
+  <div class="card">
+    <h3>🦊 Web3 Wallet</h3>
+    <div class="fl"><div style="flex:2"><label>Address</label><input id="w3-addr" placeholder="0xAbc…"></div>
+      <div><label>Chain</label><select id="w3-chain"><option>ethereum</option><option>polygon</option><option>bsc</option><option>arbitrum</option><option>base</option></select></div>
+      <button class="btn btn-go" id="w3Btn">Read Balances</button></div>
+    <div id="w3Bal"></div>
+  </div>
+</div>
+
+</div><!-- /wrap -->
+<div id="toast"></div>
 
 <script>
+// ====== CORE ======
 const $=id=>document.getElementById(id);
-async function api(method,path,body){
+const fmt=n=>Number(n).toLocaleString(undefined,{maximumFractionDigits:2});
+async function api(m,p,body){
+  try{const r=await fetch(p,{method:m,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+    return await r.json()}catch(e){return{error:e.message}}}
+let toastT;function toast(msg,t='ok'){$('toast').className='show '+t;$('toast').textContent=msg;clearTimeout(toastT);toastT=setTimeout(()=>$('toast').className='',3000)}
+
+// ====== NAV ======
+document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');$('v-'+b.dataset.v).classList.add('on');
+  if(b.dataset.v==='markets')loadExchanges();
+});
+
+// ====== LIVE POLLING (every 2s) ======
+let lastSignals=0;
+async function poll(){
   try{
-    const r=await fetch(path,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
-    return await r.json();
-  }catch(e){toast('Network error: '+e.message,'err');return{}}
+    const s=await api('GET','/api/status');
+    $('m-bal').textContent='$'+fmt(s.usdt||0);
+    if(s.venue)$('m-venue').textContent=s.venue+(s.okx_demo?' (demo)':'');
+    $('m-sig').textContent=s.signals_processed||0;
+    $('m-ord').textContent=s.orders_sent||0;
+    $('m-fill').textContent=s.fills_received||0;
+    $('m-crowd').textContent=s.crowd_regime||'neutral';
+    $('m-crowdSub').textContent=(s.crowd_engine_events||0)+' events';
+    const dot=$('dot'),txt=$('dotTxt');
+    if(s.running){dot.className='pulse live';txt.textContent='LIVE'}else{dot.className='pulse idle';txt.textContent='IDLE'}
+    // Detect new signals → load fills
+    if((s.signals_processed||0)>lastSignals){lastSignals=s.signals_processed||0;loadFills()}
+  }catch(e){}
+  // Crowd signals
+  try{const c=await api('GET','/api/crowd/signals');renderCrowd(c)}catch(e){}
+  // Positions
+  try{const p=await api('GET','/api/positions');renderPos(p)}catch(e){}
 }
-function toast(msg,type='ok'){
-  const t=$('toast');t.textContent=msg;t.className='toast '+type+' show';
-  clearTimeout(window._tt);window._tt=setTimeout(()=>t.className='toast',3000);
-}
-function show(v){
-  document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));
-  $('view-'+v).classList.add('active');
-  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
-  [...document.querySelectorAll('.nav button')].find(b=>b.textContent.toLowerCase().includes(v))?.classList.add('active');
-}
-// Live WS
-function connectWS(){
-  const proto=location.protocol==='https:'?'wss':'ws';
-  const ws=new WebSocket(proto+'://'+location.host+'/ws/live');
-  ws.onmessage=e=>{
-    try{const d=JSON.parse(e.data);updateLive(d)}catch(err){}
-  };
-  ws.onclose=()=>setTimeout(connectWS,3000);
-}
-function updateLive(d){
-  if(d.status){
-    $('m-signals').textContent=d.status.signals||0;
-    $('m-orders').textContent=d.status.orders||0;
-    $('m-fills').textContent=d.status.fills||0;
-    $('m-crowd').textContent=d.status.crowd_regime||'neutral';
-    const dot=$('statusDot');const txt=$('statusText');
-    if(d.status.running){dot.className='dot live';txt.textContent='LIVE'}else{dot.className='dot dry';txt.textContent='IDLE'}
-  }
-  if(d.balance!=null)$('m-balance').textContent='$'+Number(d.balance).toLocaleString(undefined,{maximumFractionDigits:2});
-  if(d.crowd){
-    $('m-crowdev').textContent=(d.crowd.events_emitted||0)+' events';
-    renderCrowd(d.crowd);
-  }
-}
-function renderCrowd(c){
-  const scores=c.live_scores||{};const weights=c.weights||{};
-  const cont=$('crowdSignals');cont.innerHTML='';
-  for(const[name,info]of Object.entries(scores)){
-    const score=(info&&typeof info.score==='number')?info.score:0;
-    const pct=Math.abs(score)*50;const dir=score>=0?1:-1;
-    const color=score>0.3?'var(--red)':score<-0.3?'var(--green)':'var(--txt-dim)';
-    const hasData=info&&info.has_data;
-    const row=document.createElement('div');row.className='signal-row';
-    row.innerHTML=`
-      <div class="signal-name">${name}${hasData?'':' ◌'}</div>
-      <div class="signal-bar"><div class="signal-fill" style="width:${pct}%;background:${color};${dir<0?'right:50%;left:auto;':''}"></div></div>
-      <div class="signal-val">${score.toFixed(2)}</div>`;
-    cont.appendChild(row);
-  }
-  const ww=$('crowdWeights');
-  let h='<table><thead><tr><th>Signal</th><th>Weight</th></tr></thead><tbody>';
-  for(const[n,w]of Object.entries(weights)){h+=`<tr><td>${n}</td><td>${w.toFixed(3)}</td></tr>`}
-  h+='</tbody></table>';ww.innerHTML=h;
-  $('crowdStats').innerHTML=`<div class="metric-sub">Events emitted: <b>${c.events_emitted||0}</b></div>
-    <div class="metric-sub">Symbols: ${(c.symbols||[]).join(', ')||'—'}</div>
-    <div class="metric-sub">Last crowd score: <b>${JSON.stringify(c.last_scores||{})}</b></div>`;
-}
-async function loadProfiles(){
-  const r=await api('GET','/api/profiles');
-  const tb=$('profileTable');tb.innerHTML='';
-  (r.profiles||[]).forEach(p=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${p.active?'▶':''}</td><td>${p.name}</td><td>${p.venue}</td>
-      <td>${p.demo?'demo':'live'}</td><td>${p.field_count}</td>
-      <td><button class="btn" onclick="useProfile('${p.name}')">Use</button>
-      <button class="btn danger" onclick="delProfile('${p.name}')">Del</button></td>`;
-    tb.appendChild(tr);
-  });
-}
-async function useProfile(n){const r=await api('POST','/api/profiles/use',{name:n});toast(r.ok?'Switched to '+n:'Not found');loadProfiles()}
-async function delProfile(n){await api('DELETE','/api/profiles/'+n);toast('Deleted '+n);loadProfiles()}
-async function addProfile(){
-  const r=await api('POST','/api/profiles/add',{name:$('p-name').value,fields:{okx_api_key:$('p-key').value,okx_api_secret:$('p-secret').value,okx_passphrase:$('p-pass').value}});
-  toast(r.ok?'Profile added':'Failed');loadProfiles();
-}
-async function loadKeys(){
-  const r=await api('GET','/api/keys');
-  const kl=$('keysList');kl.innerHTML='<table><thead><tr><th>Field</th><th>Set</th><th>Profile</th></tr></thead><tbody>';
-  for(const[profile,fields]of Object.entries(r.profiles||{})){
-    for(const[f,info]of Object.entries(fields)){
-      kl.innerHTML+=`<tr><td>${f}</td><td>${info.set?'✓':'✗'}</td><td>${profile}</td></tr>`;
+setInterval(poll,2000);poll();
+
+// ====== TICKER (cross-venue BTC every 30s) ======
+async function tickerPoll(){
+  try{
+    const r=await api('GET','/api/markets?symbols=BTCUSDT,ETHUSDT');
+    let html='';
+    for(const[sym,d]of Object.entries(r)){
+      const venues=d.venues||{};let med=d.median||0;
+      let count=Object.values(venues).filter(v=>v.price>0).length;
+      html+=`<div>${sym.replace('USDT','')} <b>$${fmt(med)}</b> <span style="color:var(--txt-3)">${count} venues</span></div>`;
     }
+    $('ticker').innerHTML=html||'No data yet';
+  }catch(e){}
+}
+tickerPoll();setInterval(tickerPoll,30000);
+
+// ====== CROWD RENDER ======
+function renderCrowd(c){
+  const scores=c.live_scores||{};const w=c.weights||{};
+  const box=$('crowdBars');
+  let h='';
+  for(const[n,d]of Object.entries(scores)){
+    const sc=d.score||0;const pct=Math.min(50,Math.abs(sc)*50);
+    const dir=sc>=0?'left:50%':`right:50%`;
+    const col=sc>0.3?'var(--red)':sc<-0.3?'var(--green)':'var(--txt-3)';
+    const hd=d.has_data?'✓':'◌';
+    h+=`<div class="sig"><div class="sig-n">${n} ${hd}</div>
+      <div class="sig-track"><div class="sig-fill" style="width:${pct}%;${dir};background:${col}"></div></div>
+      <div class="sig-v">${sc.toFixed(3)}</div></div>`;
   }
-  kl.innerHTML+='</tbody></table>';
-}
-async function doWithdraw(){
-  const r=await api('POST','/api/wallet/withdraw',{ccy:$('w-ccy').value,amount:parseFloat($('w-amt').value),address:$('w-addr').value,chain:$('w-chain').value,totp:$('w-totp').value});
-  if(r.ok)toast('Withdrawal submitted ✓');else toast('Blocked: '+(r.reason||r.error||'unknown'),'err');
-}
-// Markets (cross-venue)
-async function loadMarkets(){
-  const sym=$('mkt-sym').value||'BTCUSDT';
-  toast('Fetching prices across 10 exchanges...');
-  const r=await api('GET','/api/markets?symbols='+sym);
-  const s=r[sym];if(!s)return;
-  const tb=$('marketTable');tb.innerHTML='';
-  const venues=Object.entries(s.venues||{}).sort((a,b)=>(a[1].price||0)-(b[1].price||0));
-  venues.forEach(([v,info])=>{
-    const px=info.price||0;const med=s.median||0;
-    const diff=med>0?((px-med)/med*10000).toFixed(1):'—';
-    const cls=px>0?'':'opacity:0.4';
-    tb.innerHTML+=`<tr class="${cls}"><td>${v}</td><td>$${px.toFixed(2)}</td><td>${info.bid? '$'+info.bid.toFixed(2):'—'}</td><td>${info.ask?'$'+info.ask.toFixed(2):'—'}</td><td>${diff>0?'+':''}${diff} bps</td></tr>`;
+  box.innerHTML=h||'<div class="sub">No data</div>';
+  // weights
+  let wh='<table>';
+  for(const[n,v]of Object.entries(w))wh+=`<tr><td style="font-size:11px">${n}</td><td style="text-align:right;font-weight:700">${v.toFixed(3)}</td></tr>`;
+  wh+='</table>';$('crowdW').innerHTML=wh;
+  // stats
+  $('crowdSt').innerHTML=`<div class="sub">Events: <b style="color:var(--txt)">${c.events_emitted||0}</b></div>
+    <div class="sub">Symbols: <b style="color:var(--txt)">${(c.symbols||[]).join(', ')||'—'}</b></div>`;
+  // swarm agents
+  api('GET','/api/swarm/agents').then(r=>{
+    let ah='';
+    for(const a of(r.agents||[])){
+      const st=a.stats||a;
+      ah+=`<div class="chip">${a.name||st.name||'?'} ${a.is_ready||st.ready||st.is_ready?'✓':'◌'}</div>`;
+    }
+    $('agentsBox').innerHTML=ah||'<div class="sub">Loading…</div>';
+    // regime
+    const rw=r.weights||{};
+    let rh='<div class="sub">Current agent weights:</div><div style="margin-top:6px">';
+    for(const[n,v]of Object.entries(rw))rh+=`<span class="chip">${n}: ${v.toFixed(2)}</span>`;
+    rh+='</div>';$('regimeBox').innerHTML=rh;
   });
-  $('marketSummary').innerHTML=`<div class="metric-sub">Median: <b>$${(s.median||0).toFixed(2)}</b> · Best buy: <b>${s.best_buy_venue}</b> @$${(s.best_buy_price||0).toFixed(2)} · Best sell: <b>${s.best_sell_venue}</b> @$${(s.best_sell_price||0).toFixed(2)} · Spread: <b>${(s.spread_bps||0).toFixed(1)} bps</b></div>`;
-  toast('Prices loaded');
 }
+
+// ====== POSITIONS ======
+function renderPos(pos){
+  const box=$('posBox');
+  if(!Array.isArray(pos)||!pos.length){box.innerHTML='<span class="sub">No open positions</span>';return}
+  let h='<table><thead><tr><th>Symbol</th><th>Side</th><th>Size</th><th>uPnL</th></tr></thead><tbody>';
+  pos.slice(0,8).forEach(p=>{
+    const sz=parseFloat(p.pos||0);const up=parseFloat(p.upl||0);
+    h+=`<tr><td>${p.instId||'?'}</td><td>${sz>0?'LONG':sz<0?'SHORT':'FLAT'}</td><td>${sz}</td><td class="${up>=0?'pos':'neg'}">${fmt(up)}</td></tr>`;
+  });
+  h+='</tbody></table>';box.innerHTML=h;
+}
+
+// ====== FILLS FEED ======
+async function loadFills(){
+  try{
+    const r=await api('GET','/api/execution');
+    const fills=r.recent_fills||r.fills||[];
+    const box=$('feedBox');
+    if(!fills.length){box.innerHTML='<div class="sub">No signals yet — waiting for market data…</div>';return}
+    let h='';
+    fills.slice(-30).reverse().forEach(f=>{
+      const side=f.side||'?';const sym=f.symbol||'?';
+      const tagCls=side==='BUY'?'buy':side==='SELL'?'sell':'';
+      const agent=f.strategy||f.agent||'';
+      const agentTag=agent.includes('scalp')?'scalp':agent.includes('contrarian')?'contrarian':'';
+      h+=`<div class="feed-item">
+        <span class="tag ${tagCls}">${side}</span>
+        ${agentTag?`<span class="tag ${agentTag}">${agentTag}</span>`:''}
+        <span style="font-weight:600">${sym}</span>
+        <span style="color:var(--txt-3)">qty=${fmt(f.qty||0)} @ ${fmt(f.price||0)}</span>
+      </div>`;
+    });
+    box.innerHTML=h;
+  }catch(e){$('feedBox').innerHTML='<div class="sub">Loading activity…</div>'}
+}
+loadFills();
+
+// ====== TRADING CONTROL ======
+$('btnStart').onclick=async()=>{const r=await api('POST','/api/trading/start',{});toast(r.ok?'Trading started':'Failed');poll()};
+$('btnStop').onclick=async()=>{const r=await api('POST','/api/trading/stop',{});toast(r.ok?'Trading stopped':'Failed');poll()};
+
+// ====== MARKETS ======
+$('mkBtn').onclick=async()=>{
+  $('mkTable').querySelector('tbody').innerHTML='<tr><td colspan="5"><span class="spin"></span> Scanning 10 exchanges…</td></tr>';
+  const sym=$('mk-sym').value||'BTCUSDT';
+  const r=await api('GET','/api/markets?symbols='+sym);
+  const d=r[sym];if(!d){toast('No data','err');return}
+  let h='';
+  const venues=Object.entries(d.venues||{}).sort((a,b)=>(a[1].price||0)-(b[1].price||0));
+  venues.forEach(([v,i])=>{
+    const px=i.price||0;const med=d.median||0;
+    const diff=med>0?((px-med)/med*10000).toFixed(0):'—';
+    h+=`<tr><td>${v}</td><td>$${fmt(px)}</td><td>${i.bid?fmt(i.bid):'—'}</td><td>${i.ask?fmt(i.ask):'—'}</td><td>${diff>0?'+':''}${diff}</td></tr>`;
+  });
+  $('mkTable').querySelector('tbody').innerHTML=h;
+  $('mkSummary').innerHTML=`<div class="sub">Median <b>$${fmt(d.median||0)}</b> · Buy @ ${d.best_buy_venue} $${fmt(d.best_buy_price||0)} · Sell @ ${d.best_sell_venue} $${fmt(d.best_sell_price||0)} · Spread ${fmt(d.spread_bps||0)}bps</div>`;
+};
 async function loadExchanges(){
   const r=await api('GET','/api/exchanges');
-  const el=$('exchangeList');el.innerHTML='';
-  r.forEach(ex=>{
-    const ca=ex.canada?'🇨🇦':'🌐';
-    const api=ex.has_api?'':' (no bot API)';
-    el.innerHTML+=`<div class="chip">${ca} ${ex.display}${api}</div>`;
+  $('exList').innerHTML=r.map(e=>`<span class="chip">${e.canada?'🇨🇦':'🌐'} ${e.display}${e.has_api?'':' (manual)'}</span>`).join('');
+}
+
+// ====== WALLET ======
+async function loadWallet(){
+  const r=await api('GET','/api/wallet');
+  if(r.error){$('wStatus').innerHTML=`<div class="sub">${r.error}</div>`;return}
+  $('wStatus').innerHTML=`<div class="sub">Panic: <b style="color:${r.panic?'var(--red)':'var(--green)'}">${r.panic?'🚨 FROZEN':'✓ clear'}</b></div>
+    <div class="sub">Daily cap: <b>$${fmt(r.daily_cap_usd||0)}</b></div>
+    <div class="sub">Spent 24h: <b>$${fmt(r.spent_last_24h_usd||0)}</b></div>`;
+}
+$('panicBtn').onclick=async()=>{await api('POST','/api/wallet/panic',{});toast('PANIC ENGAGED','err');loadWallet()};
+$('wBtn').onclick=async()=>{
+  const r=await api('POST','/api/wallet/withdraw',{ccy:$('w-ccy').value,amount:parseFloat($('w-amt').value),address:$('w-addr').value,chain:$('w-chain').value,totp:$('w-totp').value});
+  if(r.ok)toast('Withdrawal submitted ✓');else toast('Blocked: '+(r.reason||r.error||''),'err');
+};
+setInterval(loadWallet,10000);loadWallet();
+
+// ====== PROFILES ======
+async function loadProf(){
+  const r=await api('GET','/api/profiles');
+  const tb=$('profTable').querySelector('tbody');tb.innerHTML='';
+  (r.profiles||[]).forEach(p=>{
+    tb.innerHTML+=`<tr><td>${p.active?'▶':''}</td><td>${p.name}</td><td>${p.venue}</td><td>${p.demo?'demo':'live'}</td><td>${p.field_count}</td>
+      <td><button class="btn" onclick="useProf('${p.name}')">Use</button></td></tr>`;
   });
 }
-// Web3
-async function loadWeb3(){
-  const addr=$('w3-addr').value;const chain=$('w3-chain').value;
-  if(!addr){toast('Enter a wallet address','err');return}
-  toast('Reading on-chain balances...');
-  const r=await api('GET','/api/web3/balance?address='+addr+'&chain='+chain);
-  const el=$('web3Balances');
-  if(r.error){el.innerHTML=`<div style="color:var(--red)">${r.error}</div>`;return}
-  if(!r.balances||!r.balances.length){el.innerHTML='<div class="metric-sub">No balances found (or RPC unavailable)</div>';return}
-  let h='<table><thead><tr><th>Token</th><th>Balance</th></tr></thead><tbody>';
-  r.balances.forEach(b=>{h+=`<tr><td>${b.symbol}</td><td>${b.balance.toLocaleString(undefined,{maximumFractionDigits:6})}</td></tr>`});
-  h+='</tbody></table>';el.innerHTML=h;
-  toast('Balances loaded');
-}
-// Init
-connectWS();
-loadProfiles();loadKeys();loadExchanges();
-setInterval(()=>{api('GET','/api/positions').then(r=>{if(Array.isArray(r))renderPositions(r)})},5000);
-setInterval(()=>{api('GET','/api/status').then(s=>{if(s.venue)$('m-venue').textContent='venue: '+s.venue+(s.okx_demo?' (demo)':'')})},5000);
-function renderPositions(pos){
-  const tb=$('posTable');tb.innerHTML='';
-  $('m-positions').textContent=pos.length;
-  if(!pos.length){tb.innerHTML='<tr><td colspan="4" style="color:var(--txt-dim)">No open positions</td></tr>';return}
-  pos.slice(0,8).forEach(p=>{
-    const inst=p.instId||'?';const sz=parseFloat(p.pos||0);const uPnL=parseFloat(p.upl||0);
-    const side=sz>0?'LONG':sz<0?'SHORT':'FLAT';
-    tb.innerHTML+=`<tr><td>${inst}</td><td>${side}</td><td>${sz}</td><td class="${uPnL>=0?'pos':'neg'}">${uPnL.toFixed(2)}</td></tr>`;
-  });
-}
+window.useProf=async n=>{const r=await api('POST','/api/profiles/use',{name:n});toast(r.ok?'Switched to '+n:'Not found');loadProf()};
+$('pBtn').onclick=async()=>{
+  const r=await api('POST','/api/profiles/add',{name:$('p-name').value,fields:{okx_api_key:$('p-key').value,okx_api_secret:$('p-secret').value,okx_passphrase:$('p-pass').value}});
+  toast(r.ok?'Profile added':'Failed');loadProf();
+};
+loadProf();
+
+// ====== WEB3 ======
+$('w3Btn').onclick=async()=>{
+  const a=$('w3-addr').value;if(!a){toast('Enter address','err');return}
+  $('w3Bal').innerHTML='<span class="spin"></span> Reading chain…';
+  const r=await api('GET','/api/web3/balance?address='+a+'&chain='+$('w3-chain').value);
+  if(r.error){$('w3Bal').innerHTML=`<div class="neg">${r.error}</div>`;return}
+  if(!r.balances||!r.balances.length){$('w3Bal').innerHTML='<div class="sub">No balances found</div>';return}
+  $('w3Bal').innerHTML='<table><tbody>'+r.balances.map(b=>`<tr><td>${b.symbol}</td><td style="text-align:right">${fmt(b.balance)}</td></tr>`).join('')+'</tbody></table>';
+};
+
+// ====== RISK ======
+setInterval(async()=>{
+  try{
+    const r=await api('GET','/api/risk');
+    $('r-kill').textContent=r.kill_switch_triggered?'🚨 TRIGGERED':'✓ clear';
+    $('r-kill').className='metric '+(r.kill_switch_triggered?'neg':'pos');
+    $('r-eq').textContent='$'+fmt(r.equity||0);
+    $('r-dd').textContent=(r.max_drawdown_pct||0)+'%';
+    $('r-kelly').textContent=(r.kelly_fraction||0.25);
+  }catch(e){}
+},5000);
 </script>
 </body>
 </html>
