@@ -124,6 +124,7 @@ td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.02);font-variant-nu
     <button data-v="wallet">Wallet</button>
     <button data-v="profiles">Profiles</button>
     <button data-v="breakthroughs">Alpha+</button>
+    <button data-v="autopilot">Auto</button>
     <button data-v="settings">Settings</button>
     <button data-v="web3">Web3</button>
   </nav>
@@ -274,6 +275,19 @@ td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.02);font-variant-nu
   <div class="card">
     <h3>🚀 25 Breakthrough Alpha Modules</h3>
     <div class="agent-grid" id="btGrid"></div>
+  </div>
+</div>
+
+<!-- ===== AUTOPILOT ===== -->
+<div class="view" id="v-autopilot">
+  <div class="card">
+    <h3>🤖 AutoPilot — Autonomous Mode</h3>
+    <div id="apStatus" style="margin-bottom:14px"></div>
+    <div class="g" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))" id="apToggles"></div>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <h3>⚡ Recent Automated Actions</h3>
+    <div id="apActions" style="max-height:300px;overflow-y:auto"></div>
   </div>
 </div>
 
@@ -623,6 +637,57 @@ async function loadKeys(){
 // Wallet unfreeze + set-cap
 $('ufBtn').onclick=async()=>{const r=await api('POST','/api/wallet/unfreeze',{totp:$('uf-totp').value});toast(r.ok?'Unfrozen':'Bad TOTP',r.ok?'ok':'err');loadWallet()};
 $('capBtn').onclick=async()=>{const r=await api('POST','/api/wallet/set-cap',{cap:parseFloat($('cap-val').value),totp:$('cap-totp').value});toast(r.ok?'Cap set':'Bad TOTP',r.ok?'ok':'err');loadWallet()};
+
+// ===== AUTOPILOT =====
+const AP_LABELS={
+  auto_start:'Auto-Start Trading',auto_risk_scaling:'Auto Risk Scaling',
+  auto_symbol_rotation:'Auto Symbol Rotation',auto_compound:'Auto-Compound Profits',
+  auto_reconnect:'Auto Reconnect Feed',auto_kill_recovery:'Auto Kill Recovery',
+};
+const AP_DESCS={
+  auto_start:'Starts trading automatically on launch',auto_risk_scaling:'Scales Kelly up/down from market stress',
+  auto_symbol_rotation:'Rotates capital to highest-conviction symbol',auto_compound:'Reinvests 90% of realized profits',
+  auto_reconnect:'Restarts data feed if it drops',auto_kill_recovery:'Resets kill switch after cooldown if safe',
+};
+async function loadAP(){
+  const r=await api('GET','/api/autopilot');if(r.error)return;
+  // Status
+  if($('apStatus'))$('apStatus').innerHTML=`
+    <div class="metric" style="font-size:18px;color:${r.running?'var(--green)':'var(--txt-3)'}">
+      ${r.running?'● AUTONOMOUS':'○ manual'}</div>
+    <div class="sub">Cycles: <b>${r.cycles||0}</b> · Equity base: <b>$${fmt(r.equity_base||0)}</b> · Session PnL: <b class="${(r.session_pnl||0)>=0?'pos':'neg'}">${(r.session_pnl||0)>=0?'+':''}$${fmt(r.session_pnl||0)}</b></div>`;
+  // Toggles
+  if($('apToggles')){
+    let h='';
+    for(const[name,on]of Object.entries(r.toggles||{})){
+      h+=`<div class="card" style="padding:12px;cursor:pointer" onclick="toggleAP('${name}')">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:36px;height:20px;border-radius:10px;background:${on?'var(--green)':'var(--txt-3)'};position:relative;transition:.2s">
+            <div style="position:absolute;top:2px;left:${on?'18px':'2px'};width:16px;height:16px;border-radius:50%;background:#fff;transition:.2s"></div>
+          </div>
+          <span style="font-size:11px;font-weight:700">${AP_LABELS[name]||name}</span>
+        </div>
+        <div class="sub" style="margin-top:6px">${AP_DESCS[name]||''}</div>
+      </div>`;
+    }
+    $('apToggles').innerHTML=h;
+  }
+  // Actions
+  if($('apActions')){
+    const acts=r.recent_actions||[];
+    $('apActions').innerHTML=acts.length?acts.map(a=>{
+      const t=new Date(a.time*1000).toLocaleTimeString();
+      return `<div class="feed-item"><span class="tag BUY">AUTO</span><span style="color:var(--txt-3)">${t}</span> <b>${a.action}</b></div>`;
+    }).join(''):'<div class="sub">No automated actions yet</div>';
+  }
+}
+window.toggleAP=async n=>{
+  const r=await api('GET','/api/autopilot');
+  const cur=r.toggles?.[n]??false;
+  await api('POST','/api/autopilot/toggle',{name:n,value:!cur});
+  toast(`${AP_LABELS[n]||n}: ${!cur?'ON':'OFF'}`);loadAP();
+};
+setInterval(()=>{if($('v-autopilot')&&$('v-autopilot').classList.contains('on'))loadAP()},3000);
 
 // ===== INIT =====
 initChart();loadChart();poll();loadFills();loadProf();loadWallet();loadSettings();loadKeys();

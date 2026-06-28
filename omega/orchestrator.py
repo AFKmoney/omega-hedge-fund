@@ -98,6 +98,9 @@ class OmegaOrchestrator:
                 )
         # Layer 6
         self.meta_cognition = MetaCognition(self.settings.meta_cognition)
+        # AutoPilot — autonomous trading controller
+        from omega.autopilot import AutoPilot
+        self.autopilot = AutoPilot(self)
         # State
         self._running = False
         self._last_regime: str = "unknown"
@@ -128,6 +131,8 @@ class OmegaOrchestrator:
         await self.crowd_engine.start()
         await self.meta_cognition.start_background()
         await self.data_nexus.start()
+        # Start AutoPilot for full autonomous mode
+        await self.autopilot.start()
         # Spawn the main event loop
         self._loop_task = asyncio.create_task(self._main_loop())
         logger.info("OMEGA is live. Press Ctrl+C to shut down.",
@@ -149,6 +154,7 @@ class OmegaOrchestrator:
                 logger.warning(f"Loop task shutdown error: {exc}")
         await self.alpha_swarm.stop()
         await self.crowd_engine.stop()
+        await self.autopilot.stop()
         await self.meta_cognition.stop_background()
         await self.data_nexus.stop()
         await self.execution_blade.close()

@@ -117,6 +117,9 @@ class OmegaWebServer:
         self.app.router.add_post("/api/settings", self._api_settings_set)
         self.app.router.add_get("/api/symbols", self._api_symbols_get)
         self.app.router.add_post("/api/symbols", self._api_symbols_set)
+        # AutoPilot
+        self.app.router.add_get("/api/autopilot", self._api_autopilot_get)
+        self.app.router.add_post("/api/autopilot/toggle", self._api_autopilot_toggle)
 
     # ------------------------------------------------------------------
     # Static GUI
@@ -564,6 +567,24 @@ class OmegaWebServer:
             return web.json_response({"ok": True, "symbols": syms,
                                       "msg": "Symbols set — restart trading to apply"})
         return web.json_response({"ok": False, "error": "no symbols"}, status=400)
+
+    async def _api_autopilot_get(self, request: web.Request) -> web.Response:
+        """Return AutoPilot status and automation toggles."""
+        try:
+            return web.json_response(self.orch.autopilot.stats())
+        except Exception as exc:
+            return web.json_response({"error": str(exc)}, status=500)
+
+    async def _api_autopilot_toggle(self, request: web.Request) -> web.Response:
+        """Toggle an individual automation switch."""
+        data = await request.json()
+        name = data.get("name", "")
+        value = bool(data.get("value", False))
+        try:
+            ok = self.orch.autopilot.set_toggle(name, value)
+            return web.json_response({"ok": ok, "toggles": self.orch.autopilot.stats()["toggles"]})
+        except Exception as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=500)
 
     # ------------------------------------------------------------------
     # WebSocket live
