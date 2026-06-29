@@ -73,6 +73,7 @@ class CrowdPositioningEngine:
         self.symbols = tuple(s.upper() for s in symbols)
         # Core V1 signals
         self.funding = funding or FundingRateSignal()
+        self.funding.set_symbols(list(self.symbols))
         self.ls_ratio = ls_ratio or LSRatioSignal(symbols=self.symbols)
         self.sentiment = sentiment or SentimentSignal()
         # V3 signals
@@ -161,9 +162,6 @@ class CrowdPositioningEngine:
         sym = event.symbol
         if sym not in self.symbols:
             return None
-        # Feed funding rate into the funding signal (the only reactive signal;
-        # the others poll/stream independently)
-        self.funding.update(sym, event.funding_rate)
         # Feed depth snapshots into the iceberg detector (passive microstructure)
         self.iceberg.update_from_market(event)
         return self._compute_event(sym, event.timestamp)

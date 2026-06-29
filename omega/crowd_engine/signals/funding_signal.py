@@ -21,7 +21,11 @@ Normalization:
 
 from __future__ import annotations
 
+import asyncio
+import math
 from typing import Dict, Optional
+
+import aiohttp
 
 from omega.crowd_engine.signals.base import PositioningSignal, SignalReading
 from omega.utils.logger import get_logger
@@ -30,29 +34,70 @@ logger = get_logger("omega.crowd_engine.funding")
 
 
 class FundingRateSignal(PositioningSignal):
-    """Crowd positioning from perpetual funding rate."""
+    """Crowd positioning from perpetual funding rate.
+
+    Fetches funding from public REST (more reliable than fstream WS which is
+    geo-blocked in some regions). Polls every 60s — funding changes slowly."""
 
     name = "funding"
 
     def __init__(
         self,
-        threshold: float = 0.0005,  # 0.05% per 8h
+        threshold: float = 0.0005,
         weight: float = 0.40,
         horizon: str = "hours",
+        poll_interval_sec: int = 60,
     ) -> None:
         self.threshold = threshold
         self.weight = weight
         self.horizon = horizon
-        # Per-symbol latest funding: symbol -> funding_rate (fraction, e.g. 0.0001)
+        self.poll_interval_sec = poll_interval_sec
         self._latest: Dict[str, float] = {}
+        self._task = None
 
-    def update(self, symbol: str, funding_rate: Optional[float]) -> None:
-        """Called by the engine when a new funding rate arrives (from the
-        BinanceWebSocketFeed @markPrice stream, already parsed into
-        MarketEvent.funding_rate)."""
-        if funding_rate is None:
-            return
-        self._latest[symbol] = float(funding_rate)
+    async def start(self) -> None:
+        if self._task is None or self._task.done():
+            self._task = asyncio.create_task(self._poll_loop())
+
+    async def stop(self) -> None:
+        if self._task is not None:
+            self._task.cancel()
+            try: await self._task
+            except asyncio.CancelledError: pass
+            self._task = None
+
+    async def _poll_loop(self) -> None:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            while True:
+                try:
+                    await self._poll_once(session)
+                except asyncio.CancelledError: raise
+                except Exception as exc:
+                    logger.debug(f"Funding REST poll failed: {exc}")
+                await asyncio.sleep(self.poll_interval_sec)
+
+    async def _poll_once(self, session) -> None:
+        import aiohttp
+        # Binance futures public funding rate (no key, works globally)
+        for sym in self._symbols_tracked:
+            bin_sym = sym.upper()
+            url = f"https://fapi.binance.com/fapi/v1/premiumIndex?symbol={bin_sym}"
+            try:
+                async with session.get(url, timeout=10) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        rate = float(data.get("lastFundingRate", 0) or 0)
+                        self._latest[bin_sym] = rate
+                        if rate != 0:
+                            logger.debug(f"Funding {bin_sym}: {rate:.6f}")
+            except Exception:
+                pass
+
+    _symbols_tracked: list = []
+
+    def set_symbols(self, symbols: list) -> None:
+        self._symbols_tracked = symbols
 
     def reading_for(self, symbol: str) -> Optional[SignalReading]:
         rate = self._latest.get(symbol)

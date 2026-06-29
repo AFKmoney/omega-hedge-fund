@@ -134,8 +134,23 @@ class BinanceWebSocketFeed(DataSource):
         elif event_type == "24hrTicker":
             return self._parse_ticker(data)
         elif event_type == "markPriceUpdate":
-            self._last_funding[data["s"]] = float(data.get("r", 0.0))
-            return None
+            # Update funding cache AND emit a MarketEvent so the crowd engine
+            # receives the funding rate directly (was returning None before,
+            # so funding_rate never reached the FundingRateSignal).
+            sym = data.get("s", "")
+            rate = float(data.get("r", 0.0))
+            self._last_funding[sym] = rate
+            mark_px = float(data.get("p", 0.0))
+            book = self._last_book.get(sym, (0.0, 0.0, 0.0, 0.0))
+            return MarketEvent(
+                symbol=sym,
+                timestamp=self._ms_to_iso(data.get("E", 0)),
+                last_price=mark_px,
+                volume_24h=0.0,
+                bid=book[0], ask=book[1], bid_qty=book[2], ask_qty=book[3],
+                funding_rate=rate,
+                source="binance_markprice",
+            )
         return None
 
     def _parse_trade(self, data: dict) -> MarketEvent:

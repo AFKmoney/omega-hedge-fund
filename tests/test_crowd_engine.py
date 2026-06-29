@@ -33,18 +33,19 @@ def test_funding_signal_normalization() -> None:
     print("Testing funding signal normalization...", end=" ")
     from omega.crowd_engine import FundingRateSignal
     sig = FundingRateSignal(threshold=0.0005)
+    sig.set_symbols(["BTCUSDT"])
     # No data -> None
     assert sig.reading_for("BTCUSDT") is None
-    # Mild positive funding
-    sig.update("BTCUSDT", 0.0001)
+    # Mild positive funding (inject directly into the REST-polled cache)
+    sig._latest["BTCUSDT"] = 0.0001
     r = sig.reading_for("BTCUSDT")
     assert r is not None and 0 < r.score < 0.8, f"mild funding score wrong: {r}"
     # Extreme positive funding (5x threshold) -> saturates near +1
-    sig.update("BTCUSDT", 0.0025)
+    sig._latest["BTCUSDT"] = 0.0025
     r = sig.reading_for("BTCUSDT")
     assert r is not None and r.score > 0.98, f"extreme funding should saturate: {r}"
     # Negative funding -> crowd short overcrowded -> negative score
-    sig.update("BTCUSDT", -0.0025)
+    sig._latest["BTCUSDT"] = -0.0025
     r = sig.reading_for("BTCUSDT")
     assert r is not None and r.score < -0.98, f"negative funding score wrong: {r}"
     print("✓")
@@ -108,7 +109,7 @@ def test_engine_fusion_agreement_boosts_conviction() -> None:
 
     eng = CrowdPositioningEngine(symbols=("BTCUSDT",), emit_threshold=0.0, reemit_delta=0.0)
     # All six signals screaming "crowd long overcrowded"
-    eng.funding.update("BTCUSDT", 0.0020)       # extreme positive funding
+    eng.funding._latest["BTCUSDT"] = 0.0020       # extreme positive funding
     eng.ls_ratio._long_pct["BTCUSDT"] = 80.0    # 80% long
     eng.sentiment._fg_value = 95                 # extreme greed
     eng.open_interest._roc["BTCUSDT"] = 0.08     # OI piling in (leverage rising)
@@ -137,7 +138,7 @@ def test_engine_fusion_divergence_deflates_conviction() -> None:
 
     eng = CrowdPositioningEngine(symbols=("BTCUSDT",), emit_threshold=0.0, reemit_delta=0.0)
     # Funding says long overcrowded, but the rest are neutral / unseeded
-    eng.funding.update("BTCUSDT", 0.0020)
+    eng.funding._latest["BTCUSDT"] = 0.0020
     eng.ls_ratio._long_pct["BTCUSDT"] = 50.0   # neutral
     eng.sentiment._fg_value = 50                # neutral
     # open_interest / liquidations / social left unseeded (None -> skipped)
@@ -160,7 +161,7 @@ def test_engine_below_threshold_emits_nothing() -> None:
     from omega.utils.events import MarketEvent
 
     eng = CrowdPositioningEngine(symbols=("BTCUSDT",))  # default emit_threshold=0.20
-    eng.funding.update("BTCUSDT", 0.00005)  # tiny
+    eng.funding._latest["BTCUSDT"] = 0.00005  # tiny
     eng.ls_ratio._long_pct["BTCUSDT"] = 52.0
     eng.sentiment._fg_value = 55
     ev = MarketEvent(symbol="BTCUSDT", timestamp="t", last_price=50000.0,
